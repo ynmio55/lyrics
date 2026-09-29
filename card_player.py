@@ -89,6 +89,27 @@ def make_card_background(
 
 # Preset Visual Styles
 STYLES = {
+    "liquid_glass": {
+        "name": "💎 Liquid Glass Karaoke",
+        "mode": "island",
+        "has_card": True,
+        "box_w": 820,
+        "box_h": 158,
+        "radius": 34,
+        "bg_rgb": (12, 22, 40),
+        "border_rgb": (125, 211, 252),
+        "border_width": 2,
+        "badge_color": "#c4b5fd",
+        "text_color": "#f8fafc",
+        "subtext_color": "#64748b",
+        "accent_color": "#7dd3fc",
+        "future_color": "#64748b",
+        "past_color": "#a5f3fc",
+        "active_color": "#ffffff",
+        "font_size": 23,
+        "font_weight": "bold",
+        "word_karaoke": True,
+    },
     "floating_cards": {
         "name": "🌙 การ์ดลอยแก้วมน (Modern Glass Float)",
         "mode": "floating",
@@ -474,6 +495,8 @@ class DynamicIslandHUD:
 
         self.line_start_time = 0.0
         self.line_end_time = 1.0
+        self.word_items = []
+        self.active_word_line = None
 
     def render_bg(self):
         self.bg_photo = make_card_background(
@@ -486,12 +509,80 @@ class DynamicIslandHUD:
         )
         self.canvas.create_image(0, 0, anchor="nw", image=self.bg_photo)
 
-    def set_lyric(self, current_text, next_text, start_time, next_time):
-        self.canvas.itemconfigure(self.txt_main, text=current_text)
-        if next_text:
-            self.canvas.itemconfigure(
-                self.txt_next, text=f"⬇ ถัดไป: {next_text}"
+    def _clear_word_items(self):
+        for item_id, *_ in self.word_items:
+            try:
+                self.canvas.delete(item_id)
+            except Exception:
+                pass
+        self.word_items = []
+        self.active_word_line = None
+
+    def _render_word_line(self, word_line):
+        self._clear_word_items()
+        words = word_line.get("words", [])
+        if not words:
+            return False
+
+        font_obj = tkfont.Font(
+            family=BEST_FONT,
+            size=self.cfg["font_size"],
+            weight=self.cfg["font_weight"],
+        )
+        chunks = [w.get("text", "") for w in words]
+        widths = [max(1, font_obj.measure(chunk)) for chunk in chunks]
+        total_w = sum(widths)
+        max_w = self.box_w - 72
+
+        font_size = self.cfg["font_size"]
+        if total_w > max_w and total_w > 0:
+            font_size = max(14, int(font_size * max_w / total_w))
+            font_obj = tkfont.Font(
+                family=BEST_FONT,
+                size=font_size,
+                weight=self.cfg["font_weight"],
             )
+            widths = [max(1, font_obj.measure(chunk)) for chunk in chunks]
+            total_w = sum(widths)
+
+        x = (self.box_w - total_w) / 2
+        y = 70
+        future = self.cfg.get("future_color", self.cfg.get("subtext_color", "#64748b"))
+
+        for word, chunk, width in zip(words, chunks, widths):
+            item_id = self.canvas.create_text(
+                x,
+                y,
+                anchor="w",
+                text=chunk,
+                font=(BEST_FONT, font_size, self.cfg["font_weight"]),
+                fill=future,
+            )
+            self.word_items.append(
+                (
+                    item_id,
+                    float(word.get("start", word_line.get("start", 0.0))),
+                    float(word.get("end", word.get("start", 0.0) + 0.35)),
+                )
+            )
+            x += width
+
+        self.active_word_line = word_line
+        return True
+
+    def set_lyric(self, current_text, next_text, start_time, next_time, word_line=None):
+        rendered_words = False
+        if self.cfg.get("word_karaoke") and word_line:
+            rendered_words = self._render_word_line(word_line)
+
+        if rendered_words:
+            self.canvas.itemconfigure(self.txt_main, text="")
+        else:
+            self._clear_word_items()
+            self.canvas.itemconfigure(self.txt_main, text=current_text)
+
+        if next_text:
+            self.canvas.itemconfigure(self.txt_next, text=f"ถัดไป  •  {next_text}")
         else:
             self.canvas.itemconfigure(self.txt_next, text="")
         self.line_start_time = start_time
@@ -508,6 +599,20 @@ class DynamicIslandHUD:
         self.canvas.itemconfigure(
             self.txt_time, text=f"{mins:02d}:{secs:04.1f}"
         )
+
+        # Word-by-word karaoke highlighting (Enhanced LRC)
+        if self.word_items:
+            past_color = self.cfg.get("past_color", self.cfg.get("accent_color", "#7dd3fc"))
+            active_color = self.cfg.get("active_color", "#ffffff")
+            future_color = self.cfg.get("future_color", self.cfg.get("subtext_color", "#64748b"))
+            for item_id, word_start, word_end in self.word_items:
+                if current_time >= word_end:
+                    color = past_color
+                elif current_time >= word_start:
+                    color = active_color
+                else:
+                    color = future_color
+                self.canvas.itemconfigure(item_id, fill=color)
 
         # Update bottom progress bar
         dur = max(0.1, self.line_end_time - self.line_start_time)
@@ -533,12 +638,14 @@ class LyricFloatPlayer:
         audio_path=None,
         style="floating_cards",
         initial_offset=0.0,
+        word_lyrics=None,
         on_finished=None,
     ):
         self.root = root
         self.audio_path = audio_path
         self.on_finished = on_finished
         self.sync_offset = float(initial_offset)
+        self.word_lyrics = sorted(word_lyrics or [], key=lambda item: item.get("start", 0.0))
         self.is_paused = False
 
         # Filter empty lines
@@ -548,7 +655,7 @@ class LyricFloatPlayer:
         )
 
         self.style_keys = list(STYLES.keys())
-        self.style_key = style if style in STYLES else "floating_cards"
+        self.style_key = style if style in STYLES else "liquid_glass"
         self.cfg = STYLES[self.style_key]
 
         self.screen_w = root.winfo_screenwidth()
@@ -741,6 +848,18 @@ class LyricFloatPlayer:
 
         self.toast.show(f"🎨 เปลี่ยนรูปแบบ: {self.cfg['name']}", color="#cba6f7")
 
+    def get_word_line_for_time(self, timestamp, tolerance=0.45):
+        """Return the Enhanced-LRC line matching a normal line timestamp."""
+        if not self.word_lyrics:
+            return None
+        best = min(
+            self.word_lyrics,
+            key=lambda item: abs(float(item.get("start", 0.0)) - timestamp),
+        )
+        if abs(float(best.get("start", 0.0)) - timestamp) <= tolerance:
+            return best
+        return None
+
     def random_safe_x(self):
         center_x = self.screen_w // 2
         box_w = self.cfg["box_w"]
@@ -840,7 +959,10 @@ class LyricFloatPlayer:
                             self.cfg,
                             self.track_name,
                         )
-                    self.island_hud.set_lyric(text, next_text, t_stamp, next_t)
+                    word_line = self.get_word_line_for_time(t_stamp)
+                    self.island_hud.set_lyric(
+                        text, next_text, t_stamp, next_t, word_line=word_line
+                    )
                 else:
                     # Floating cards mode
                     x = self.random_safe_x()
