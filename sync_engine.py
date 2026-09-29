@@ -205,3 +205,38 @@ def load_lrc_file(filepath):
     with open(filepath, "r", encoding="utf-8") as f:
         content = f.read()
     return parse_lrc(content)
+
+
+def detect_lead_silence(filepath, threshold_rms=300):
+    """
+    Detects the duration (in seconds) of silence at the beginning of an audio file.
+    Helps auto-align lyrics if audio has leading video intro silence.
+    """
+    if not filepath or not os.path.exists(filepath):
+        return 0.0
+    try:
+        import math
+        import struct
+        import pygame
+
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+        sound = pygame.mixer.Sound(filepath)
+        raw = sound.get_raw()
+        chunk_ms = 50
+        chunk_size = int(44100 * 4 * (chunk_ms / 1000.0))
+        total_chunks = len(raw) // chunk_size
+        max_check = min(total_chunks, 400)  # check up to 20 seconds
+        for i in range(max_check):
+            sub = raw[i * chunk_size : (i + 1) * chunk_size]
+            count = len(sub) // 2
+            if count == 0:
+                continue
+            ints = struct.unpack(f"<{count}h", sub[: count * 2])
+            rms = math.sqrt(sum(x * x for x in ints) / count)
+            if rms > threshold_rms:
+                return round(i * (chunk_ms / 1000.0), 2)
+    except Exception:
+        pass
+    return 0.0
+

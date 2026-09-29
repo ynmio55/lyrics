@@ -24,6 +24,7 @@ class EasyLyricStudio(tk.Tk):
 
         self.audio_path = None
         self.synced_lyrics = []
+        self.sync_offset = 0.0
 
         self.setup_styles()
         self.build_ui()
@@ -352,66 +353,125 @@ class EasyLyricStudio(tk.Tk):
             command=self.toggle_editor,
         ).pack(side="right")
 
-        # 4. Bottom Giant Play Bar
-        bottom_bar = tk.Frame(self, bg="#0d0d15", height=80)
+        # 4. Bottom Giant Play Bar & Calibration Dock
+        bottom_bar = tk.Frame(self, bg="#0d0d15")
         bottom_bar.pack(fill="x", side="bottom")
 
-        # Offset fine-tuning
-        offset_frame = tk.Frame(bottom_bar, bg="#0d0d15")
-        offset_frame.pack(side="left", padx=20, pady=15)
+        # Row 1: Fine-tuning Offset Bar
+        offset_bar = tk.Frame(
+            bottom_bar,
+            bg="#181825",
+            highlightbackground="#313244",
+            highlightthickness=1,
+        )
+        offset_bar.pack(fill="x", padx=20, pady=(8, 4))
 
+        lbl_off_title = tk.Label(
+            offset_bar,
+            text="⏱️ ชดเชยเวลา (Offset):",
+            font=("Helvetica", 10, "bold"),
+            bg="#181825",
+            fg="#89b4fa",
+        )
+        lbl_off_title.pack(side="left", padx=(12, 6), pady=6)
+
+        self.lbl_offset_val = tk.Label(
+            offset_bar,
+            text=f"{self.sync_offset:+.2f}s",
+            font=("Helvetica", 11, "bold"),
+            bg="#252538",
+            fg="#a6e3a1",
+            padx=8,
+            pady=2,
+        )
+        self.lbl_offset_val.pack(side="left", padx=4, pady=6)
+
+        # Quick preset buttons
+        preset_buttons = [
+            (-0.5, "-0.5s"),
+            (-0.2, "-0.2s"),
+            (-0.1, "-0.1s"),
+            (0.0, "0.0s (รีเซ็ต)"),
+            (0.1, "+0.1s"),
+            (0.2, "+0.2s"),
+            (0.5, "+0.5s"),
+        ]
+        for val, label in preset_buttons:
+            if val == 0.0:
+                cmd = lambda: self.adjust_offset(0.0, absolute=True)
+                bg_col = "#313244"
+                fg_col = "#cdd6f4"
+            elif val > 0:
+                cmd = (lambda v=val: lambda: self.adjust_offset(v))()
+                bg_col = "#2a324b"
+                fg_col = "#89b4fa"
+            else:
+                cmd = (lambda v=val: lambda: self.adjust_offset(v))()
+                bg_col = "#3b2d35"
+                fg_col = "#fab387"
+
+            tk.Button(
+                offset_bar,
+                text=label,
+                font=("Helvetica", 9),
+                bg=bg_col,
+                fg=fg_col,
+                relief="flat",
+                padx=6,
+                pady=2,
+                cursor="hand2",
+                command=cmd,
+            ).pack(side="left", padx=2, pady=6)
+
+        # Auto silence button
+        tk.Button(
+            offset_bar,
+            text="⚡ ตรวจจับช่วงเงียบต้นเพลง",
+            font=("Helvetica", 9, "bold"),
+            bg="#45475a",
+            fg="#f9e2af",
+            activebackground="#585b70",
+            relief="flat",
+            padx=10,
+            pady=2,
+            cursor="hand2",
+            command=self.auto_detect_silence,
+        ).pack(side="right", padx=(4, 12), pady=6)
+
+        # Helper tip
         tk.Label(
-            offset_frame,
-            text="ปรับเวลา:",
+            offset_bar,
+            text="💡 เนื้อขึ้นเร็วไปกด [+ ชะลอ] | กด [ / ] ตอนกำลังเล่นได้ทันที",
             font=("Helvetica", 9),
-            bg="#0d0d15",
-            fg="#7f849c",
-        ).pack(side="left", padx=4)
+            bg="#181825",
+            fg="#a6adc8",
+        ).pack(side="right", padx=6, pady=6)
 
-        tk.Button(
-            offset_frame,
-            text="- 0.5s",
-            font=("Helvetica", 9),
-            bg="#2b2b3d",
-            fg="#cdd6f4",
-            relief="flat",
-            padx=6,
-            pady=2,
-            cursor="hand2",
-            command=lambda: self.adjust_offset(-0.5),
-        ).pack(side="left", padx=2)
-
-        tk.Button(
-            offset_frame,
-            text="+ 0.5s",
-            font=("Helvetica", 9),
-            bg="#2b2b3d",
-            fg="#cdd6f4",
-            relief="flat",
-            padx=6,
-            pady=2,
-            cursor="hand2",
-            command=lambda: self.adjust_offset(0.5),
-        ).pack(side="left", padx=2)
+        # Row 2: Play Bar & Style Selector
+        play_bar = tk.Frame(bottom_bar, bg="#0d0d15")
+        play_bar.pack(fill="x", padx=20, pady=(2, 10))
 
         # Style Selector
-        style_box = tk.Frame(bottom_bar, bg="#0d0d15")
-        style_box.pack(side="right", padx=(0, 15), pady=15)
+        style_box = tk.Frame(play_bar, bg="#0d0d15")
+        style_box.pack(side="left", pady=4)
 
         tk.Label(
             style_box,
-            text="🎨 รูปแบบ:",
-            font=("Helvetica", 10, "bold"),
+            text="🎨 รูปแบบหน้าจอ:",
+            font=("Helvetica", 11, "bold"),
             bg="#0d0d15",
             fg="#cdd6f4",
-        ).pack(side="left", padx=4)
+        ).pack(side="left", padx=(0, 8))
 
-        self.style_var = tk.StringVar(value="✨ ตัวหนังสือลอย (ไร้กรอบ)")
+        self.style_var = tk.StringVar(
+            value="🌙 การ์ดลอยแก้วมน (แนะนำ - สวยโมเดิร์น)"
+        )
         self.style_map = {
-            "✨ ตัวหนังสือลอย (ไร้กรอบ)": "text_only",
-            "🌙 การ์ดขอบมน (Modern Dark)": "dark_card",
-            "⚡ นีออนเรืองแสง (Cyber Glow)": "neon_glow",
-            "☁️ การ์ดมินิมอล (Soft Light)": "soft_light",
+            "🌙 การ์ดลอยแก้วมน (แนะนำ - สวยโมเดิร์น)": "floating_cards",
+            "✨ ตัวหนังสือลอยไร้กรอบ (Minimal Float)": "text_only",
+            "⚡ การ์ดนีออนไซเบอร์ลอย (Cyberpunk Neon)": "neon_cyber",
+            "☁️ การ์ดออโรราลอย (Aurora Pastel)": "glass_aurora",
+            "🏝️ แถบ Dynamic Island (Apple Music HUD)": "dynamic_island",
         }
 
         self.cb_style = ttk.Combobox(
@@ -419,14 +479,14 @@ class EasyLyricStudio(tk.Tk):
             textvariable=self.style_var,
             values=list(self.style_map.keys()),
             state="readonly",
-            width=24,
+            width=44,
             font=("Helvetica", 10),
         )
         self.cb_style.pack(side="left", padx=4)
 
         # Giant Play Button
         self.btn_play = tk.Button(
-            bottom_bar,
+            play_bar,
             text="🚀 ▶️ เล่น Lyric Cards (Enter)",
             font=("Helvetica", 13, "bold"),
             bg="#a6e3a1",
@@ -434,12 +494,12 @@ class EasyLyricStudio(tk.Tk):
             activebackground="#94e2d5",
             activeforeground="#11111b",
             relief="flat",
-            padx=24,
+            padx=28,
             pady=10,
             cursor="hand2",
             command=self.play_lyric_cards,
         )
-        self.btn_play.pack(side="right", padx=15, pady=12)
+        self.btn_play.pack(side="right")
 
     def load_initial_state(self):
         """Loads available songs/lyrics automatically so it's ready out of the box."""
@@ -492,6 +552,15 @@ class EasyLyricStudio(tk.Tk):
 
         self.entry_search.delete(0, "end")
         self.entry_search.insert(0, clean_name)
+
+        # Automatically check for leading silence in audio (e.g. video intro)
+        lead_silence = sync_engine.detect_lead_silence(song_path)
+        if lead_silence >= 0.8:
+            self.adjust_offset(lead_silence, absolute=True)
+            self.lbl_song_status.config(
+                text=f"ไฟล์: {filename} • ตรวจพบช่วงเงียบต้นเพลง {lead_silence:.1f}s (ตั้งค่าชดเชย +{lead_silence:.1f}s ให้อัตโนมัติแล้ว)",
+                fg="#a6e3a1",
+            )
 
         # 1. Check if a local .lrc file in lyrics/ matches this song
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -687,13 +756,47 @@ class EasyLyricStudio(tk.Tk):
 
         TapSyncDialog(self, self.audio_path, lines, on_complete=on_done)
 
-    def adjust_offset(self, delta):
-        if not self.synced_lyrics:
+    def adjust_offset(self, delta, absolute=False):
+        if absolute:
+            self.sync_offset = round(delta, 2)
+        else:
+            self.sync_offset = round(self.sync_offset + delta, 2)
+
+        if hasattr(self, "lbl_offset_val"):
+            self.lbl_offset_val.config(text=f"{self.sync_offset:+.2f}s")
+            if self.sync_offset > 0:
+                self.lbl_offset_val.config(fg="#89b4fa")
+            elif self.sync_offset < 0:
+                self.lbl_offset_val.config(fg="#fab387")
+            else:
+                self.lbl_offset_val.config(fg="#a6e3a1")
+
+        if self.sync_offset > 0:
+            status_hint = f"⏱️ ตั้งค่าหน่วงเวลา: +{self.sync_offset:.2f}s (เนื้อร้องจะขึ้นช้าลงอีกนิด พอดีกับเสียงร้อง)"
+        elif self.sync_offset < 0:
+            status_hint = f"⏱️ ตั้งค่าเร่งเวลา: {self.sync_offset:.2f}s (เนื้อร้องจะขึ้นเร็วขึ้น)"
+        else:
+            status_hint = "⏱️ รีเซ็ตการชดเชยเวลาเป็น 0.00s (ตามไฟล์ .lrc เดิม)"
+        self.lbl_song_status.config(text=status_hint, fg="#89b4fa")
+
+    def auto_detect_silence(self):
+        if not self.audio_path:
+            messagebox.showinfo("แจ้งเตือน", "กรุณาเลือกไฟล์เพลงก่อนครับ")
             return
-        shifted = []
-        for t, text in self.synced_lyrics:
-            shifted.append((max(0.0, round(t + delta, 2)), text))
-        self.update_synced_table(shifted)
+        silence = sync_engine.detect_lead_silence(self.audio_path)
+        if silence > 0.4:
+            self.adjust_offset(silence, absolute=True)
+            messagebox.showinfo(
+                "ตรวจพบช่วงเงียบต้นเพลง",
+                f"ตรวจพบว่าไฟล์เพลงมีช่วงเงียบที่ต้นเพลง {silence:.2f} วินาที\n"
+                f"ระบบได้ตั้งค่าชดเชยเวลา +{silence:.2f}s ให้อัตโนมัติแล้ว\n"
+                f"เนื้อร้องจะเริ่มขึ้นพอดีเมื่อเสียงร้องดังขึ้นครับ!",
+            )
+        else:
+            messagebox.showinfo(
+                "ผลการตรวจจับ",
+                "ไฟล์เพลงนี้มีเสียงดนตรีเริ่มทันทีตั้งแต่ต้นเพลงครับ (ไม่พบช่วงเงียบผิดปกติ)",
+            )
 
     def play_lyric_cards(self):
         if not self.synced_lyrics:
@@ -706,15 +809,21 @@ class EasyLyricStudio(tk.Tk):
         # Hide studio window while playing
         self.withdraw()
 
-        def on_done():
+        def on_done(final_offset):
+            self.sync_offset = final_offset
+            if hasattr(self, "lbl_offset_val"):
+                self.lbl_offset_val.config(text=f"{self.sync_offset:+.2f}s")
             self.deiconify()
 
-        chosen_style = self.style_map.get(self.style_var.get(), "text_only")
+        chosen_style = self.style_map.get(
+            self.style_var.get(), "floating_cards"
+        )
         player = LyricFloatPlayer(
             self,
             self.synced_lyrics,
             audio_path=self.audio_path,
             style=chosen_style,
+            initial_offset=self.sync_offset,
             on_finished=on_done,
         )
         player.start()
