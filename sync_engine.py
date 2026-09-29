@@ -32,6 +32,8 @@ def parse_lrc(lrc_content: str):
         # Text is whatever follows the last timestamp tag
         last_match = matches[-1]
         text = line[last_match.end() :].strip()
+        # Enhanced LRC may contain <mm:ss.xx> word tags; keep plain text for line mode.
+        text = re.sub(r"<\d+:\d+(?:\.\d+)?>", "", text).strip()
 
         # Some LRCs have multiple tags per line like [00:10.00][00:20.00] Repeat
         for m in matches:
