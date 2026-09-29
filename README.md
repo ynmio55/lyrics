@@ -31,6 +31,14 @@ python main.py
 
 ---
 
+## ✨ Liquid Glass Karaoke
+
+- ธีมหลักใหม่แนว **Liquid Glass** โทนน้ำเงินใส ขอบเรืองแสง และ HUD แบบลอย
+- รองรับ **Enhanced LRC (ELRC)** เช่น `[00:13.15]<00:13.15>Oh <00:13.55>it`
+- ถ้าแหล่งเนื้อเพลงมีเวลาระดับคำ ระบบจะไฮไลต์คำแบบคาราโอเกะตามเสียงร้อง
+- ถ้าไม่มี word timing จะ fallback เป็น line sync เดิมโดยอัตโนมัติ
+- ติดตั้ง dependency ด้วย `pip install -r requirements.txt`
+
 ## 🎯 ฟีเจอร์หลักในหน้าต่าง Lyric Studio
 
 1. **เลือกเพลง (.mp3)**:
