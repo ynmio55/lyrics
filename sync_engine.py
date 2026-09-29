@@ -32,6 +32,8 @@ def parse_lrc(lrc_content: str):
         # Text is whatever follows the last timestamp tag
         last_match = matches[-1]
         text = line[last_match.end() :].strip()
+        # Enhanced LRC may contain <mm:ss.xx> word tags; keep plain text for line mode.
+        text = re.sub(r"<\d+:\d+(?:\.\d+)?>", "", text).strip()
 
         # Some LRCs have multiple tags per line like [00:10.00][00:20.00] Repeat
         for m in matches:
@@ -43,6 +45,79 @@ def parse_lrc(lrc_content: str):
 
     results.sort(key=lambda x: x[0])
     return results
+
+
+
+def parse_enhanced_lrc(lrc_content: str):
+    """
+    Parse Enhanced LRC (ELRC) with per-word timestamps.
+
+    Example:
+      [00:13.15]<00:13.15>Oh <00:13.55>it <00:13.80>was
+    """
+    lines = []
+    line_pattern = re.compile(r"\[(\d+):(\d+(?:\.\d+)?)\]")
+    word_pattern = re.compile(r"<(\d+):(\d+(?:\.\d+)?)>")
+
+    for raw_line in lrc_content.splitlines():
+        line_match = line_pattern.search(raw_line)
+        if not line_match:
+            continue
+
+        line_start = int(line_match.group(1)) * 60 + float(line_match.group(2))
+        body = raw_line[line_match.end():]
+        matches = list(word_pattern.finditer(body))
+        if not matches:
+            continue
+
+        words = []
+        for idx, match in enumerate(matches):
+            start = int(match.group(1)) * 60 + float(match.group(2))
+            token_end = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
+            token = body[match.end():token_end]
+            if token:
+                words.append({"text": token, "start": start, "end": None})
+
+        if words:
+            lines.append(
+                {
+                    "start": line_start,
+                    "text": "".join(w["text"] for w in words).strip(),
+                    "words": words,
+                }
+            )
+
+    lines.sort(key=lambda item: item["start"])
+
+    for li, line in enumerate(lines):
+        fallback_line_end = (
+            lines[li + 1]["start"] if li + 1 < len(lines) else line["start"] + 5.0
+        )
+        for wi, word in enumerate(line["words"]):
+            if wi + 1 < len(line["words"]):
+                word["end"] = line["words"][wi + 1]["start"]
+            else:
+                word["end"] = max(word["start"] + 0.18, fallback_line_end)
+
+    return lines
+
+
+def search_enhanced_lyrics(query: str) -> str:
+    """
+    Try to fetch Enhanced LRC (word-level karaoke timing).
+    syncedlyrics is optional; the app still works with LRCLIB if it is missing.
+    """
+    if not query.strip():
+        return ""
+    try:
+        import syncedlyrics
+
+        result = syncedlyrics.search(query.strip(), enhanced=True)
+        if result and re.search(r"<\d+:\d+(?:\.\d+)?>", result):
+            return result
+    except Exception as e:
+        print(f"Enhanced lyric search unavailable for '{query}': {e}")
+    return ""
 
 
 def format_lrc(lyrics_list, title="Song", artist="Unknown"):
@@ -110,6 +185,9 @@ def search_online_lyrics(query: str):
                             }
                         )
                 if synced_results:
+                    enhanced = search_enhanced_lyrics(q)
+                    if enhanced:
+                        synced_results[0]["enhancedLyrics"] = enhanced
                     return synced_results
         except Exception as e:
             print(f"LrcLib search error for '{q}': {e}")

@@ -20,10 +20,11 @@ class EasyLyricStudio(tk.Tk):
         self.title("🎵 Lyric Studio - โหมดอัตโนมัติ ใช้ง่ายที่สุด")
         self.geometry("980x680")
         self.minsize(860, 580)
-        self.configure(bg="#14141e")
+        self.configure(bg="#0b1020")
 
         self.audio_path = None
         self.synced_lyrics = []
+        self.word_synced_lyrics = []
         self.sync_offset = 0.0
 
         self.setup_styles()
@@ -40,38 +41,38 @@ class EasyLyricStudio(tk.Tk):
 
         style.configure(
             "Treeview",
-            background="#1e1e2e",
+            background="#111a2f",
             foreground="#cdd6f4",
-            fieldbackground="#1e1e2e",
+            fieldbackground="#111a2f",
             rowheight=30,
             font=("Helvetica", 11),
             borderwidth=0,
         )
         style.configure(
             "Treeview.Heading",
-            background="#2b2b3d",
-            foreground="#89b4fa",
+            background="#17233b",
+            foreground="#7dd3fc",
             font=("Helvetica", 11, "bold"),
             relief="flat",
             padding=6,
         )
         style.map(
             "Treeview",
-            background=[("selected", "#45475a")],
-            foreground=[("selected", "#a6e3a1")],
+            background=[("selected", "#263653")],
+            foreground=[("selected", "#a7f3d0")],
         )
 
     def build_ui(self):
         # 1. Header
-        header = tk.Frame(self, bg="#0d0d15", height=65)
+        header = tk.Frame(self, bg="#070b14", height=65)
         header.pack(fill="x")
 
         lbl_app = tk.Label(
             header,
             text="🎵 Lyric Studio",
             font=("Helvetica", 16, "bold"),
-            bg="#0d0d15",
-            fg="#89b4fa",
+            bg="#070b14",
+            fg="#7dd3fc",
         )
         lbl_app.pack(side="left", padx=(20, 10), pady=12)
 
@@ -79,7 +80,7 @@ class EasyLyricStudio(tk.Tk):
             header,
             text="✨ เลือกเพลงปุ๊บ ระบบดึงเนื้อเพลงพร้อมเวลาให้อัตโนมัติทันที",
             font=("Helvetica", 10),
-            bg="#0d0d15",
+            bg="#070b14",
             fg="#7f849c",
         )
         lbl_tag.pack(side="left", pady=(15, 12))
@@ -87,8 +88,8 @@ class EasyLyricStudio(tk.Tk):
         # 2. Main Step 1 Card: Song Picker & Auto Status
         step1_frame = tk.Frame(
             self,
-            bg="#1e1e2e",
-            highlightbackground="#313244",
+            bg="#111a2f",
+            highlightbackground="#2a3855",
             highlightthickness=1,
         )
         step1_frame.pack(fill="x", padx=20, pady=(15, 10))
@@ -98,7 +99,7 @@ class EasyLyricStudio(tk.Tk):
             step1_frame,
             text="📂 1. เลือกไฟล์เพลง (.mp3)",
             font=("Helvetica", 12, "bold"),
-            bg="#89b4fa",
+            bg="#7dd3fc",
             fg="#11111b",
             activebackground="#b4befe",
             relief="flat",
@@ -110,14 +111,14 @@ class EasyLyricStudio(tk.Tk):
         btn_pick.pack(side="left", padx=15, pady=12)
 
         # Song info display
-        info_frame = tk.Frame(step1_frame, bg="#1e1e2e")
+        info_frame = tk.Frame(step1_frame, bg="#111a2f")
         info_frame.pack(side="left", fill="both", expand=True, padx=5, pady=8)
 
         self.lbl_song_title = tk.Label(
             info_frame,
             text="ยังไม่ได้เลือกเพลง (กดปุ่มซ้ายเพื่อเลือก)",
             font=("Helvetica", 12, "bold"),
-            bg="#1e1e2e",
+            bg="#111a2f",
             fg="#cdd6f4",
             anchor="w",
         )
@@ -127,28 +128,28 @@ class EasyLyricStudio(tk.Tk):
             info_frame,
             text="รอเลือกเพลง...",
             font=("Helvetica", 10),
-            bg="#1e1e2e",
+            bg="#111a2f",
             fg="#a6adc8",
             anchor="w",
         )
         self.lbl_song_status.pack(fill="x")
 
         # Quick Search Box (only if user wants to change search title)
-        search_box = tk.Frame(step1_frame, bg="#1e1e2e")
+        search_box = tk.Frame(step1_frame, bg="#111a2f")
         search_box.pack(side="right", padx=15, pady=12)
 
         tk.Label(
             search_box,
             text="ชื่อเพลง:",
             font=("Helvetica", 9, "bold"),
-            bg="#1e1e2e",
+            bg="#111a2f",
             fg="#a6adc8",
         ).pack(side="left", padx=4)
 
         self.entry_search = tk.Entry(
             search_box,
             font=("Helvetica", 10),
-            bg="#2b2b3d",
+            bg="#17233b",
             fg="#cdd6f4",
             insertbackground="#cdd6f4",
             relief="flat",
@@ -162,7 +163,7 @@ class EasyLyricStudio(tk.Tk):
             search_box,
             text="🔍 ค้นหาใหม่",
             font=("Helvetica", 9, "bold"),
-            bg="#45475a",
+            bg="#263653",
             fg="#cdd6f4",
             relief="flat",
             padx=10,
@@ -173,19 +174,19 @@ class EasyLyricStudio(tk.Tk):
         btn_re_search.pack(side="left", padx=4)
 
         # 3. Step 2: Content Area (Notebook/Tabs: Preview vs Edit)
-        content_frame = tk.Frame(self, bg="#14141e")
+        content_frame = tk.Frame(self, bg="#0b1020")
         content_frame.pack(fill="both", expand=True, padx=20, pady=5)
 
         # Top bar of content: Tools & Actions
-        tools_bar = tk.Frame(content_frame, bg="#14141e")
+        tools_bar = tk.Frame(content_frame, bg="#0b1020")
         tools_bar.pack(fill="x", pady=(0, 6))
 
         tk.Label(
             tools_bar,
             text="📋 รายการเนื้อเพลง & เวลา (พร้อมเล่น)",
             font=("Helvetica", 11, "bold"),
-            bg="#14141e",
-            fg="#a6e3a1",
+            bg="#0b1020",
+            fg="#a7f3d0",
         ).pack(side="left")
 
         # Tool buttons on right
@@ -193,7 +194,7 @@ class EasyLyricStudio(tk.Tk):
             tools_bar,
             text="📂 โหลด .lrc",
             font=("Helvetica", 9),
-            bg="#313244",
+            bg="#2a3855",
             fg="#cdd6f4",
             relief="flat",
             padx=8,
@@ -221,7 +222,7 @@ class EasyLyricStudio(tk.Tk):
             tools_bar,
             text="📝 แปะ/แก้ไขเนื้อเพลง",
             font=("Helvetica", 9),
-            bg="#45475a",
+            bg="#263653",
             fg="#cdd6f4",
             relief="flat",
             padx=10,
@@ -234,8 +235,8 @@ class EasyLyricStudio(tk.Tk):
         # Main Table (Treeview)
         table_container = tk.Frame(
             content_frame,
-            bg="#1e1e2e",
-            highlightbackground="#313244",
+            bg="#111a2f",
+            highlightbackground="#2a3855",
             highlightthickness=1,
         )
         table_container.pack(fill="both", expand=True)
@@ -259,7 +260,7 @@ class EasyLyricStudio(tk.Tk):
         # Collapsible text editor (initially hidden)
         self.editor_frame = tk.Frame(
             content_frame,
-            bg="#1e1e2e",
+            bg="#111a2f",
             highlightbackground="#fab387",
             highlightthickness=1,
         )
@@ -267,7 +268,7 @@ class EasyLyricStudio(tk.Tk):
             self.editor_frame,
             text="วางเนื้อเพลงที่ต้องการด้านล่าง แล้วกด [ ✨ ซิงค์เวลาตามข้อความนี้ ]",
             font=("Helvetica", 10, "bold"),
-            bg="#1e1e2e",
+            bg="#111a2f",
             fg="#fab387",
         ).pack(anchor="w", padx=10, pady=(6, 4))
 
@@ -275,7 +276,7 @@ class EasyLyricStudio(tk.Tk):
             self.editor_frame,
             height=7,
             font=("Helvetica", 10),
-            bg="#14141e",
+            bg="#0b1020",
             fg="#cdd6f4",
             insertbackground="#cdd6f4",
             relief="flat",
@@ -285,14 +286,14 @@ class EasyLyricStudio(tk.Tk):
         self.txt_editor.pack(fill="both", expand=True, padx=10, pady=4)
         self.attach_context_menu(self.txt_editor)
 
-        editor_btn_bar = tk.Frame(self.editor_frame, bg="#1e1e2e")
+        editor_btn_bar = tk.Frame(self.editor_frame, bg="#111a2f")
         editor_btn_bar.pack(fill="x", padx=10, pady=(0, 6))
 
         tk.Button(
             editor_btn_bar,
             text="✨ ซิงค์เวลาตามข้อความนี้",
             font=("Helvetica", 9, "bold"),
-            bg="#a6e3a1",
+            bg="#a7f3d0",
             fg="#11111b",
             relief="flat",
             padx=10,
@@ -305,7 +306,7 @@ class EasyLyricStudio(tk.Tk):
             editor_btn_bar,
             text="📋 วาง (Paste)",
             font=("Helvetica", 9, "bold"),
-            bg="#89b4fa",
+            bg="#7dd3fc",
             fg="#11111b",
             relief="flat",
             padx=10,
@@ -318,7 +319,7 @@ class EasyLyricStudio(tk.Tk):
             editor_btn_bar,
             text="📄 คัดลอก (Copy)",
             font=("Helvetica", 9),
-            bg="#45475a",
+            bg="#263653",
             fg="#cdd6f4",
             relief="flat",
             padx=8,
@@ -331,7 +332,7 @@ class EasyLyricStudio(tk.Tk):
             editor_btn_bar,
             text="❌ ล้าง (Clear)",
             font=("Helvetica", 9),
-            bg="#45475a",
+            bg="#263653",
             fg="#e78284",
             relief="flat",
             padx=8,
@@ -344,7 +345,7 @@ class EasyLyricStudio(tk.Tk):
             editor_btn_bar,
             text="ปิดกล่องแก้ไข",
             font=("Helvetica", 9),
-            bg="#313244",
+            bg="#2a3855",
             fg="#cdd6f4",
             relief="flat",
             padx=8,
@@ -354,14 +355,14 @@ class EasyLyricStudio(tk.Tk):
         ).pack(side="right")
 
         # 4. Bottom Giant Play Bar & Calibration Dock
-        bottom_bar = tk.Frame(self, bg="#0d0d15")
+        bottom_bar = tk.Frame(self, bg="#070b14")
         bottom_bar.pack(fill="x", side="bottom")
 
         # Row 1: Fine-tuning Offset Bar
         offset_bar = tk.Frame(
             bottom_bar,
-            bg="#181825",
-            highlightbackground="#313244",
+            bg="#0e1628",
+            highlightbackground="#2a3855",
             highlightthickness=1,
         )
         offset_bar.pack(fill="x", padx=20, pady=(8, 4))
@@ -370,8 +371,8 @@ class EasyLyricStudio(tk.Tk):
             offset_bar,
             text="⏱️ ชดเชยเวลา (Offset):",
             font=("Helvetica", 10, "bold"),
-            bg="#181825",
-            fg="#89b4fa",
+            bg="#0e1628",
+            fg="#7dd3fc",
         )
         lbl_off_title.pack(side="left", padx=(12, 6), pady=6)
 
@@ -380,7 +381,7 @@ class EasyLyricStudio(tk.Tk):
             text=f"{self.sync_offset:+.2f}s",
             font=("Helvetica", 11, "bold"),
             bg="#252538",
-            fg="#a6e3a1",
+            fg="#a7f3d0",
             padx=8,
             pady=2,
         )
@@ -399,12 +400,12 @@ class EasyLyricStudio(tk.Tk):
         for val, label in preset_buttons:
             if val == 0.0:
                 cmd = lambda: self.adjust_offset(0.0, absolute=True)
-                bg_col = "#313244"
+                bg_col = "#2a3855"
                 fg_col = "#cdd6f4"
             elif val > 0:
                 cmd = (lambda v=val: lambda: self.adjust_offset(v))()
                 bg_col = "#2a324b"
-                fg_col = "#89b4fa"
+                fg_col = "#7dd3fc"
             else:
                 cmd = (lambda v=val: lambda: self.adjust_offset(v))()
                 bg_col = "#3b2d35"
@@ -428,7 +429,7 @@ class EasyLyricStudio(tk.Tk):
             offset_bar,
             text="⚡ ตรวจจับช่วงเงียบต้นเพลง",
             font=("Helvetica", 9, "bold"),
-            bg="#45475a",
+            bg="#263653",
             fg="#f9e2af",
             activebackground="#585b70",
             relief="flat",
@@ -443,31 +444,32 @@ class EasyLyricStudio(tk.Tk):
             offset_bar,
             text="💡 เนื้อขึ้นเร็วไปกด [+ ชะลอ] | กด [ / ] ตอนกำลังเล่นได้ทันที",
             font=("Helvetica", 9),
-            bg="#181825",
+            bg="#0e1628",
             fg="#a6adc8",
         ).pack(side="right", padx=6, pady=6)
 
         # Row 2: Play Bar & Style Selector
-        play_bar = tk.Frame(bottom_bar, bg="#0d0d15")
+        play_bar = tk.Frame(bottom_bar, bg="#070b14")
         play_bar.pack(fill="x", padx=20, pady=(2, 10))
 
         # Style Selector
-        style_box = tk.Frame(play_bar, bg="#0d0d15")
+        style_box = tk.Frame(play_bar, bg="#070b14")
         style_box.pack(side="left", pady=4)
 
         tk.Label(
             style_box,
             text="🎨 รูปแบบหน้าจอ:",
             font=("Helvetica", 11, "bold"),
-            bg="#0d0d15",
+            bg="#070b14",
             fg="#cdd6f4",
         ).pack(side="left", padx=(0, 8))
 
         self.style_var = tk.StringVar(
-            value="🌙 การ์ดลอยแก้วมน (แนะนำ - สวยโมเดิร์น)"
+            value="💎 Liquid Glass Karaoke (แนะนำ)"
         )
         self.style_map = {
-            "🌙 การ์ดลอยแก้วมน (แนะนำ - สวยโมเดิร์น)": "floating_cards",
+            "💎 Liquid Glass Karaoke (แนะนำ)": "liquid_glass",
+            "🌙 การ์ดลอยแก้วมน (สวยโมเดิร์น)": "floating_cards",
             "✨ ตัวหนังสือลอยไร้กรอบ (Minimal Float)": "text_only",
             "⚡ การ์ดนีออนไซเบอร์ลอย (Cyberpunk Neon)": "neon_cyber",
             "☁️ การ์ดออโรราลอย (Aurora Pastel)": "glass_aurora",
@@ -489,7 +491,7 @@ class EasyLyricStudio(tk.Tk):
             play_bar,
             text="🚀 ▶️ เล่น Lyric Cards (Enter)",
             font=("Helvetica", 13, "bold"),
-            bg="#a6e3a1",
+            bg="#a7f3d0",
             fg="#11111b",
             activebackground="#94e2d5",
             activeforeground="#11111b",
@@ -543,7 +545,7 @@ class EasyLyricStudio(tk.Tk):
         clean_name = sync_engine.clean_song_query(filename)
 
         self.lbl_song_title.config(
-            text=f"🎵 {clean_name}", fg="#a6e3a1"
+            text=f"🎵 {clean_name}", fg="#a7f3d0"
         )
         self.lbl_song_status.config(
             text=f"ไฟล์: {filename} • ความยาว: {duration:.1f} วินาที",
@@ -559,7 +561,7 @@ class EasyLyricStudio(tk.Tk):
             self.adjust_offset(lead_silence, absolute=True)
             self.lbl_song_status.config(
                 text=f"ไฟล์: {filename} • ตรวจพบช่วงเงียบต้นเพลง {lead_silence:.1f}s (ตั้งค่าชดเชย +{lead_silence:.1f}s ให้อัตโนมัติแล้ว)",
-                fg="#a6e3a1",
+                fg="#a7f3d0",
             )
 
         # 1. Check if a local .lrc file in lyrics/ matches this song
@@ -604,6 +606,9 @@ class EasyLyricStudio(tk.Tk):
                 t_name = best.get("trackName", query)
                 a_name = best.get("artistName", "")
                 parsed = sync_engine.parse_lrc(best.get("syncedLyrics", ""))
+                word_items = sync_engine.parse_enhanced_lrc(
+                    best.get("enhancedLyrics", "")
+                )
                 # Filter empty lines
                 valid_items = [
                     (t, txt.strip())
@@ -611,12 +616,19 @@ class EasyLyricStudio(tk.Tk):
                     if txt and txt.strip()
                 ]
 
-                self.after(0, lambda: self.update_synced_table(valid_items))
+                self.after(
+                    0,
+                    lambda: self.update_synced_table(
+                        valid_items, word_items=word_items
+                    ),
+                )
                 self.after(
                     0,
                     lambda: self.lbl_song_status.config(
-                        text=f"✅ พร้อมเล่นทันที! พบเนื้อเพลงจาก '{t_name} - {a_name}' ({len(valid_items)} ท่อน)",
-                        fg="#a6e3a1",
+                        text=(f"✅ พร้อมเล่นทันที! พบ '{t_name} - {a_name}' • "
+                              f"{len(valid_items)} ท่อน"
+                              + (" • 🎤 Word Sync พร้อมใช้งาน" if word_items else " • Line Sync")),
+                        fg="#a7f3d0",
                     ),
                 )
             else:
@@ -646,14 +658,17 @@ class EasyLyricStudio(tk.Tk):
     def load_lrc_file_path(self, filepath):
         try:
             items = sync_engine.load_lrc_file(filepath)
+            with open(filepath, "r", encoding="utf-8") as f:
+                raw_lrc = f.read()
+            word_items = sync_engine.parse_enhanced_lrc(raw_lrc)
             valid_items = [
                 (t, txt.strip()) for t, txt in items if txt and txt.strip()
             ]
-            self.update_synced_table(valid_items)
+            self.update_synced_table(valid_items, word_items=word_items)
             lrc_name = os.path.basename(filepath)
             self.lbl_song_status.config(
                 text=f"✅ โหลดเนื้อเพลงจากไฟล์ {lrc_name} เรียบร้อย ({len(valid_items)} ท่อน)",
-                fg="#a6e3a1",
+                fg="#a7f3d0",
             )
         except Exception as e:
             self.lbl_song_status.config(
@@ -667,7 +682,8 @@ class EasyLyricStudio(tk.Tk):
         if filepath:
             self.load_lrc_file_path(filepath)
 
-    def update_synced_table(self, items):
+    def update_synced_table(self, items, word_items=None):
+        self.word_synced_lyrics = word_items or []
         self.synced_lyrics = sorted(
             [(t, txt) for t, txt in items if txt and txt.strip()],
             key=lambda x: x[0],
@@ -714,7 +730,7 @@ class EasyLyricStudio(tk.Tk):
                     0,
                     lambda: self.lbl_song_status.config(
                         text=f"✅ จัดเวลาสำเร็จตามเนื้อเพลงที่คุณวาง ({len(aligned)} ท่อน)",
-                        fg="#a6e3a1",
+                        fg="#a7f3d0",
                     ),
                 )
             else:
@@ -751,7 +767,7 @@ class EasyLyricStudio(tk.Tk):
             self.update_synced_table(timestamps)
             self.lbl_song_status.config(
                 text=f"✅ บันทึกเวลาจากการเคาะ Spacebar เรียบร้อย ({len(timestamps)} ท่อน)",
-                fg="#a6e3a1",
+                fg="#a7f3d0",
             )
 
         TapSyncDialog(self, self.audio_path, lines, on_complete=on_done)
@@ -765,11 +781,11 @@ class EasyLyricStudio(tk.Tk):
         if hasattr(self, "lbl_offset_val"):
             self.lbl_offset_val.config(text=f"{self.sync_offset:+.2f}s")
             if self.sync_offset > 0:
-                self.lbl_offset_val.config(fg="#89b4fa")
+                self.lbl_offset_val.config(fg="#7dd3fc")
             elif self.sync_offset < 0:
                 self.lbl_offset_val.config(fg="#fab387")
             else:
-                self.lbl_offset_val.config(fg="#a6e3a1")
+                self.lbl_offset_val.config(fg="#a7f3d0")
 
         if self.sync_offset > 0:
             status_hint = f"⏱️ ตั้งค่าหน่วงเวลา: +{self.sync_offset:.2f}s (เนื้อร้องจะขึ้นช้าลงอีกนิด พอดีกับเสียงร้อง)"
@@ -777,7 +793,7 @@ class EasyLyricStudio(tk.Tk):
             status_hint = f"⏱️ ตั้งค่าเร่งเวลา: {self.sync_offset:.2f}s (เนื้อร้องจะขึ้นเร็วขึ้น)"
         else:
             status_hint = "⏱️ รีเซ็ตการชดเชยเวลาเป็น 0.00s (ตามไฟล์ .lrc เดิม)"
-        self.lbl_song_status.config(text=status_hint, fg="#89b4fa")
+        self.lbl_song_status.config(text=status_hint, fg="#7dd3fc")
 
     def auto_detect_silence(self):
         if not self.audio_path:
@@ -824,6 +840,7 @@ class EasyLyricStudio(tk.Tk):
             audio_path=self.audio_path,
             style=chosen_style,
             initial_offset=self.sync_offset,
+            word_lyrics=self.word_synced_lyrics,
             on_finished=on_done,
         )
         player.start()
@@ -845,7 +862,7 @@ class EasyLyricStudio(tk.Tk):
             self.clipboard_clear()
             self.clipboard_append(text)
             self.lbl_song_status.config(
-                text="✅ คัดลอกเนื้อเพลงลงคลิปบอร์ดแล้ว", fg="#a6e3a1"
+                text="✅ คัดลอกเนื้อเพลงลงคลิปบอร์ดแล้ว", fg="#a7f3d0"
             )
 
     def attach_context_menu(self, widget):
@@ -853,10 +870,10 @@ class EasyLyricStudio(tk.Tk):
         menu = tk.Menu(
             widget,
             tearoff=0,
-            bg="#2b2b3d",
+            bg="#17233b",
             fg="#cdd6f4",
-            activebackground="#45475a",
-            activeforeground="#a6e3a1",
+            activebackground="#263653",
+            activeforeground="#a7f3d0",
             font=("Helvetica", 10),
         )
 
