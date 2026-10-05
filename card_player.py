@@ -43,7 +43,7 @@ def init_audio():
 
 
 # Default animation physics
-RISE_SPEED = 60
+RISE_SPEED = 42
 BOTTOM_SPAWN_OFFSET = 140
 TRANS_KEY = "#000002"
 TRANS_KEY_RGB = (0, 0, 2)
@@ -275,7 +275,7 @@ class FloatingToast:
 class FloatingCardItem:
     """An individual floating card for floating mode."""
 
-    def __init__(self, parent, text, x, y, timestamp_str, cfg):
+    def __init__(self, parent, text, x, y, timestamp_str, cfg, start_time=0.0, end_time=None):
         self.win = tk.Toplevel(parent)
         self.cfg = cfg
 
@@ -361,13 +361,16 @@ class FloatingCardItem:
             width=wrap_w,
         )
 
-        # Timing comes first: display the full lyric immediately at its timestamp.
-        # A typewriter reveal made long lines visibly lag behind the vocal.
+        # Keep the original floating-card look, but reveal the text using
+        # the lyric line's own time window instead of a fixed typewriter speed.
+        self.full_text = text
         self.clusters = split_graphemes(text)
-        self.type_idx = len(self.clusters)
+        self.start_time = float(start_time)
+        self.end_time = float(end_time) if end_time is not None else self.start_time + 3.5
+        self.last_reveal_count = -1
         if self.shadow_id:
-            self.canvas.itemconfigure(self.shadow_id, text=text)
-        self.canvas.itemconfigure(self.text_id, text=text)
+            self.canvas.itemconfigure(self.shadow_id, text="")
+        self.canvas.itemconfigure(self.text_id, text="")
 
     def typewriter(self):
         if not self.is_alive:
@@ -382,6 +385,21 @@ class FloatingCardItem:
                 self.win.after(35, self.typewriter)
         except Exception:
             self.is_alive = False
+
+    def update_reveal(self, current_time):
+        """Reveal this lyric progressively across its LRC time window."""
+        if not self.is_alive or not self.clusters:
+            return
+        duration = max(0.45, self.end_time - self.start_time)
+        frac = min(1.0, max(0.0, (current_time - self.start_time) / duration))
+        count = min(len(self.clusters), max(1, int(math.ceil(len(self.clusters) * frac))))
+        if count == self.last_reveal_count:
+            return
+        self.last_reveal_count = count
+        shown = "".join(self.clusters[:count])
+        if self.shadow_id:
+            self.canvas.itemconfigure(self.shadow_id, text=shown)
+        self.canvas.itemconfigure(self.text_id, text=shown)
 
     def rise(self, dy):
         if not self.is_alive:
@@ -742,7 +760,7 @@ class LyricFloatPlayer:
         root,
         lyrics,
         audio_path=None,
-        style="karaoke_flow",
+        style="floating_cards",
         initial_offset=0.0,
         on_finished=None,
     ):
@@ -759,7 +777,7 @@ class LyricFloatPlayer:
         )
 
         self.style_keys = list(STYLES.keys())
-        self.style_key = style if style in STYLES else "karaoke_flow"
+        self.style_key = style if style in STYLES else "floating_cards"
         self.cfg = STYLES[self.style_key]
 
         # Cache font for text measurement (avoid creating new Font objects every tick)
@@ -976,7 +994,7 @@ class LyricFloatPlayer:
         if box_w is None:
             box_w = self.cfg["box_w"]
         center_x = self.screen_w // 2
-        spacing = box_w + 50
+        spacing = box_w + 70
         left_x = max(20, center_x - spacing)
         right_x = min(self.screen_w - box_w - 20, center_x + 50)
 
@@ -1093,13 +1111,18 @@ class LyricFloatPlayer:
                     est_box_w = max(self.cfg["box_w"], min(needed_w, 900))
                     x = self.random_safe_x(est_box_w)
                     y = self.screen_h - self.cfg["box_h"] - BOTTOM_SPAWN_OFFSET
-                    # Keep a single active lyric card. Multiple independent
-                    # top-level windows look messy and can overlap on fast songs.
-                    for old_card in self.floating_boxes:
-                        old_card.destroy()
-                    self.floating_boxes.clear()
+                    # Original behavior: every new lyric becomes a card and
+                    # previous cards keep floating upward until they leave the screen.
+                    # This keeps the visual stream continuous instead of making a line vanish.
                     card = FloatingCardItem(
-                        self.root, text, x, y, t_str, self.cfg
+                        self.root,
+                        text,
+                        x,
+                        y,
+                        t_str,
+                        self.cfg,
+                        start_time=t_stamp,
+                        end_time=next_t,
                     )
                     self.floating_boxes.append(card)
 
@@ -1116,6 +1139,7 @@ class LyricFloatPlayer:
                 dy = RISE_SPEED * dt
                 alive = []
                 for box in self.floating_boxes:
+                    box.update_reveal(calibrated_t)
                     box.rise(dy)
                     if box.is_offscreen():
                         box.destroy()
@@ -1187,7 +1211,7 @@ class LyricFloatPlayer:
             self.on_finished(self.sync_offset)
 
 
-def play_standalone(lyrics, audio_path=None, style="karaoke_flow"):
+def play_standalone(lyrics, audio_path=None, style="floating_cards"):
     root = tk.Tk()
     root.withdraw()
 
@@ -1212,4 +1236,4 @@ if __name__ == "__main__":
         (3.5, "迷わずに今 矛盾だらけの世界を"),
         (7.0, "その手で撃ち放て"),
     ]
-    play_standalone(sample_lyrics, style="karaoke_flow")
+    play_standalone(sample_lyrics, style="floating_cards")
