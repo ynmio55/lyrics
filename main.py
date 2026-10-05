@@ -6,10 +6,28 @@ falls back to the preserved Tkinter build so the project never becomes unusable.
 
 from __future__ import annotations
 
+import os
 import runpy
+import sys
+
+
+def _prepare_linux_overlay_backend() -> None:
+    """Use XWayland/X11 for the global overlay behavior on Linux.
+
+    GNOME/Wayland deliberately keeps ordinary application windows scoped to a
+    workspace. The original Tk overlay behaved like an unmanaged X11 overlay,
+    so the modern player uses Qt's xcb backend by default on Linux.
+    Set LYRIC_STUDIO_NATIVE_WAYLAND=1 to opt out.
+    """
+    if not sys.platform.startswith("linux"):
+        return
+    if os.environ.get("LYRIC_STUDIO_NATIVE_WAYLAND") == "1":
+        return
+    os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
 
 def main() -> int:
+    _prepare_linux_overlay_backend()
     try:
         from modern_app import run
     except ImportError as exc:
