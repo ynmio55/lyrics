@@ -117,6 +117,27 @@ def search_online_lyrics(query: str):
     return []
 
 
+
+def rank_lyrics_results(results, query="", audio_duration=0.0):
+    """Rank synced lyric candidates using title similarity and audio duration."""
+    q = clean_song_query(query)
+    qn = clean_text(q)
+    def score(item):
+        title = clean_text(item.get("trackName", ""))
+        artist = clean_text(item.get("artistName", ""))
+        name_score = max(
+            difflib.SequenceMatcher(None, qn, title).ratio(),
+            difflib.SequenceMatcher(None, qn, (title + " " + artist).strip()).ratio(),
+        ) if qn else 0.0
+        duration = float(item.get("duration") or 0)
+        if audio_duration > 0 and duration > 0:
+            diff = abs(duration - audio_duration)
+            duration_score = max(0.0, 1.0 - diff / 20.0)
+        else:
+            duration_score = 0.5
+        return name_score * 0.72 + duration_score * 0.28
+    return sorted(results or [], key=score, reverse=True)
+
 def auto_align_lyrics(user_lines, reference_lrc_text, start_from_zero=True):
     """
     Automatically aligns user's pasted raw lyric lines with a full reference synced lyrics.
