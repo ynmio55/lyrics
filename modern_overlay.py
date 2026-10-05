@@ -105,10 +105,14 @@ class ModernLyricOverlay(QWidget):
         self._end_timer_started = False
 
         self.setWindowTitle("Lyric Studio Overlay")
+        # Use a real top-level window instead of Qt.Tool. Some Linux desktops
+        # hide/de-prioritize Tool windows when another application becomes active.
+        # Keeping the overlay as a normal frameless top-level window makes the
+        # lyrics remain visible while switching between browser/editor/apps.
         self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
+            Qt.WindowType.Window
+            | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
@@ -130,6 +134,13 @@ class ModernLyricOverlay(QWidget):
         self.timer.setInterval(16)
         self.timer.timeout.connect(self._tick)
 
+        # Reassert stacking without touching lyric animation/timing. This is
+        # intentionally a separate low-frequency timer so the 60 FPS compositor
+        # remains exactly as before.
+        self.topmost_timer = QTimer(self)
+        self.topmost_timer.setInterval(700)
+        self.topmost_timer.timeout.connect(self._keep_on_top)
+
         self.rise_speed = 52.0
         self.card_margin = 46.0
         self.card_gap = 28.0
@@ -148,6 +159,13 @@ class ModernLyricOverlay(QWidget):
         self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
         self.player.play()
         self.timer.start()
+        self.topmost_timer.start()
+
+    def _keep_on_top(self) -> None:
+        """Keep the overlay above other application windows without stealing focus."""
+        if self._closing or not self.isVisible():
+            return
+        self.raise_()
 
     def _audio_time(self) -> float:
         return max(0.0, self.player.position() / 1000.0)
@@ -376,6 +394,7 @@ class ModernLyricOverlay(QWidget):
             return
         self._closing = True
         self.timer.stop()
+        self.topmost_timer.stop()
         self.player.stop()
         self.finished.emit(self.offset)
         self.close()
