@@ -74,6 +74,14 @@ def clean_song_query(query: str) -> str:
     return cleaned if cleaned else query.strip()
 
 
+def name_similarity(a: str, b: str) -> float:
+    """Similarity helper shared by local and online lyric matching."""
+    aa, bb = clean_text(clean_song_query(a)), clean_text(clean_song_query(b))
+    if not aa or not bb:
+        return 0.0
+    return difflib.SequenceMatcher(None, aa, bb).ratio()
+
+
 def search_online_lyrics(query: str):
     """
     Searches LrcLib for songs matching the query and returns list of songs with synced lyrics.
