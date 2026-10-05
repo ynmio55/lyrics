@@ -491,11 +491,11 @@ class EasyLyricStudio(tk.Tk):
 
         tk.Label(
             style_box,
-            text="STYLE",
-            font=("Helvetica", 11, "bold"),
+            text="VIEW",
+            font=("Helvetica", 9, "bold"),
             bg="#0b0b0c",
-            fg="#ededed",
-        ).pack(side="left", padx=(0, 8))
+            fg="#77777f",
+        ).pack(side="left", padx=(0, 10))
 
         self.style_var = tk.StringVar(
             value="Floating Lyrics"
@@ -507,15 +507,50 @@ class EasyLyricStudio(tk.Tk):
             "Karaoke Flow": "karaoke_flow",
         }
 
-        self.cb_style = ttk.Combobox(
+        # Custom style picker: avoids the dated native ttk combobox chrome.
+        self.style_menu_btn = tk.Menubutton(
             style_box,
             textvariable=self.style_var,
-            values=list(self.style_map.keys()),
-            state="readonly",
-            width=44,
+            font=("Helvetica", 10, "bold"),
+            bg="#171719",
+            fg="#eeeeef",
+            activebackground="#222226",
+            activeforeground="#ffffff",
+            relief="flat",
+            bd=0,
+            highlightthickness=1,
+            highlightbackground="#303036",
+            highlightcolor="#303036",
+            indicatoron=False,
+            padx=14,
+            pady=7,
+            cursor="hand2",
+            width=18,
+        )
+        self.style_menu_btn.pack(side="left", padx=4)
+
+        style_menu = tk.Menu(
+            self.style_menu_btn,
+            tearoff=0,
+            bg="#141416",
+            fg="#eeeeef",
+            activebackground="#242428",
+            activeforeground="#ffffff",
+            bd=0,
+            relief="flat",
             font=("Helvetica", 10),
         )
-        self.cb_style.pack(side="left", padx=4)
+        for label in self.style_map:
+            style_menu.add_radiobutton(
+                label=label,
+                variable=self.style_var,
+                value=label,
+                selectcolor="#c8ff47",
+                activebackground="#242428",
+                activeforeground="#ffffff",
+                accelerator="✓" if label == self.style_var.get() else "",
+            )
+        self.style_menu_btn.configure(menu=style_menu)
 
         # Giant Play Button
         self.btn_play = tk.Button(
