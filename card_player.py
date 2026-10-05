@@ -159,10 +159,10 @@ STYLES = {
     },
     "dynamic_island": {
         "name": "Compact Player", "mode": "island", "has_card": True,
-        "box_w": 720, "box_h": 132, "radius": 24,
-        "bg_rgb": (10, 10, 11), "border_rgb": (48, 48, 52),
+        "box_w": 820, "box_h": 148, "radius": 20,
+        "bg_rgb": (12, 12, 14), "border_rgb": (52, 52, 57),
         "border_width": 1, "badge_color": "#d8ff3e",
-        "text_color": "#ffffff", "subtext_color": "#8f8f96",
+        "text_color": "#ffffff", "subtext_color": "#898990",
         "accent_color": "#d8ff3e", "font_size": 21, "font_weight": "bold",
     },
 }
@@ -215,14 +215,14 @@ class FloatingToast:
             self.h // 2,
             text="",
             font=(BEST_FONT, 12, "bold"),
-            fill="#a6e3a1",
+            fill="#c8ff47",
             justify="center",
         )
 
         self.hide_job = None
         self.win.withdraw()
 
-    def show(self, text, color="#a6e3a1", duration_ms=1600):
+    def show(self, text, color="#c8ff47", duration_ms=1600):
         if self.hide_job:
             self.parent.after_cancel(self.hide_job)
 
@@ -303,7 +303,7 @@ class FloatingCardItem:
                 24,
                 text=badge_text,
                 font=(BEST_FONT, 9, "bold"),
-                fill=cfg.get("badge_color", "#89b4fa"),
+                fill=cfg.get("badge_color", "#c8ff47"),
                 justify="center",
             )
             text_y = self.box_h // 2 + 10
@@ -398,7 +398,7 @@ class DynamicIslandHUD:
             pass
 
         x = (self.screen_w - self.box_w) // 2
-        y = self.screen_h - self.box_h - 90
+        y = self.screen_h - self.box_h - 120
         self.win.geometry(f"{self.box_w}x{self.box_h}+{x}+{y}")
 
         self.canvas = tk.Canvas(
@@ -413,12 +413,7 @@ class DynamicIslandHUD:
         self.render_bg()
 
         # 1. Header pill / equalizer
-        self.eq_frames = [
-            " ılı.lıllılı.ıllı ",
-            " ıl.ılıll.ıl.ıll ",
-            " ıllı.ılı.lıllıl ",
-            " lı.llılı.ıllı.ı ",
-        ]
+        self.eq_frames = ["●", "●", "●", "●"]
         self.eq_idx = 0
         self.txt_eq = self.canvas.create_text(
             36,
@@ -433,7 +428,7 @@ class DynamicIslandHUD:
             170,
             24,
             anchor="w",
-            text=f"🎵 {self.track_name[:36]}",
+            text=self.track_name[:42],
             font=(BEST_FONT, 9, "bold"),
             fill=self.cfg["badge_color"],
         )
@@ -451,7 +446,7 @@ class DynamicIslandHUD:
         self.txt_main = self.canvas.create_text(
             self.box_w // 2,
             64,
-            text="🎵 เริ่มต้นเล่นเนื้อเพลง...",
+            text="Ready",
             font=(BEST_FONT, self.cfg["font_size"], self.cfg["font_weight"]),
             fill=self.cfg["text_color"],
             justify="center",
@@ -498,7 +493,7 @@ class DynamicIslandHUD:
         self.canvas.itemconfigure(self.txt_main, text=current_text)
         if next_text:
             self.canvas.itemconfigure(
-                self.txt_next, text=f"⬇ ถัดไป: {next_text}"
+                self.txt_next, text=f"NEXT  {next_text}"
             )
         else:
             self.canvas.itemconfigure(self.txt_next, text="")
@@ -589,7 +584,7 @@ class LyricFloatPlayer:
         self.ctrl_win = tk.Toplevel(self.root)
         self.ctrl_win.overrideredirect(True)
         self.ctrl_win.attributes("-topmost", True)
-        self.ctrl_win.configure(bg="#181825")
+        self.ctrl_win.configure(bg="#101012")
 
         bar_w = 460
         bar_h = 42
@@ -598,8 +593,8 @@ class LyricFloatPlayer:
         # Container
         frame = tk.Frame(
             self.ctrl_win,
-            bg="#181825",
-            highlightbackground="#313244",
+            bg="#101012",
+            highlightbackground="#2a2a2e",
             highlightthickness=1,
         )
         frame.pack(fill="both", expand=True)
@@ -607,21 +602,21 @@ class LyricFloatPlayer:
         # Offset display
         self.lbl_offset = tk.Label(
             frame,
-            text=f"⏱️ {self.sync_offset:+.2f}s",
+            text=f"OFFSET {self.sync_offset:+.2f}s",
             font=(BEST_FONT, 9, "bold"),
-            bg="#181825",
-            fg="#a6e3a1",
+            bg="#101012",
+            fg="#c8ff47",
         )
         self.lbl_offset.pack(side="left", padx=(10, 6))
 
         # Delay button (appears later)
         tk.Button(
             frame,
-            text="⏪ +0.1s (ชะลอ)",
+            text="+0.1  DELAY",
             font=(BEST_FONT, 8, "bold"),
-            bg="#313244",
-            fg="#cdd6f4",
-            activebackground="#45475a",
+            bg="#2a2a2e",
+            fg="#eeeeef",
+            activebackground="#343439",
             relief="flat",
             padx=6,
             pady=2,
@@ -632,11 +627,11 @@ class LyricFloatPlayer:
         # Advance button (appears sooner)
         tk.Button(
             frame,
-            text="⏩ -0.1s (เร่ง)",
+            text="-0.1  ADVANCE",
             font=(BEST_FONT, 8, "bold"),
-            bg="#313244",
-            fg="#cdd6f4",
-            activebackground="#45475a",
+            bg="#2a2a2e",
+            fg="#eeeeef",
+            activebackground="#343439",
             relief="flat",
             padx=6,
             pady=2,
@@ -647,11 +642,11 @@ class LyricFloatPlayer:
         # Pause / Resume
         self.btn_pause = tk.Button(
             frame,
-            text="⏸️ พัก",
+            text="PAUSE",
             font=(BEST_FONT, 8, "bold"),
-            bg="#313244",
-            fg="#f9e2af",
-            activebackground="#45475a",
+            bg="#2a2a2e",
+            fg="#d9d9dc",
+            activebackground="#343439",
             relief="flat",
             padx=6,
             pady=2,
@@ -663,11 +658,11 @@ class LyricFloatPlayer:
         # Style switch
         tk.Button(
             frame,
-            text="🎨 สไตล์",
+            text="STYLE",
             font=(BEST_FONT, 8),
-            bg="#313244",
-            fg="#cba6f7",
-            activebackground="#45475a",
+            bg="#2a2a2e",
+            fg="#a9a9b2",
+            activebackground="#343439",
             relief="flat",
             padx=6,
             pady=2,
@@ -678,10 +673,10 @@ class LyricFloatPlayer:
         # Stop (ESC)
         tk.Button(
             frame,
-            text="⏹ ออก (ESC)",
+            text="CLOSE  ESC",
             font=(BEST_FONT, 8, "bold"),
-            bg="#e78284",
-            fg="#11111b",
+            bg="#e06c75",
+            fg="#0b0b0c",
             activebackground="#ea999c",
             relief="flat",
             padx=8,
@@ -707,10 +702,10 @@ class LyricFloatPlayer:
 
         if delta > 0:
             msg = f"⏱️ หน่วงเวลา: {self.sync_offset:+.2f}s (เนื้อร้องจะขึ้นช้าลงอีกนิด)"
-            col = "#89b4fa"
+            col = "#c8ff47"
         else:
             msg = f"⏱️ เร่งเวลา: {self.sync_offset:+.2f}s (เนื้อร้องจะขึ้นเร็วขึ้นอีกนิด)"
-            col = "#fab387"
+            col = "#d7ad68"
         self.toast.show(msg, color=col)
 
     def toggle_pause(self):
@@ -721,16 +716,16 @@ class LyricFloatPlayer:
                     pygame.mixer.music.pause()
             except Exception:
                 pass
-            self.btn_pause.config(text="▶️ เล่นต่อ", fg="#a6e3a1")
-            self.toast.show("⏸️ พักชั่วคราว (กด Space เพื่อเล่นต่อ)", color="#f9e2af")
+            self.btn_pause.config(text="▶️ เล่นต่อ", fg="#c8ff47")
+            self.toast.show("⏸️ พักชั่วคราว (กด Space เพื่อเล่นต่อ)", color="#d9d9dc")
         else:
             try:
                 if pygame.mixer.get_init():
                     pygame.mixer.music.unpause()
             except Exception:
                 pass
-            self.btn_pause.config(text="⏸️ พัก", fg="#f9e2af")
-            self.toast.show("▶️ เล่นต่อ", color="#a6e3a1")
+            self.btn_pause.config(text="⏸️ พัก", fg="#d9d9dc")
+            self.toast.show("▶️ เล่นต่อ", color="#c8ff47")
 
     def cycle_style(self):
         """Cycles between visual styles during playback."""
@@ -751,7 +746,7 @@ class LyricFloatPlayer:
                 self.root, self.screen_w, self.screen_h, self.cfg, self.track_name
             )
 
-        self.toast.show(f"🎨 เปลี่ยนรูปแบบ: {self.cfg['name']}", color="#cba6f7")
+        self.toast.show(f"🎨 เปลี่ยนรูปแบบ: {self.cfg['name']}", color="#a9a9b2")
 
     def _get_font(self):
         """Returns cached Font object for text measurement."""
@@ -798,7 +793,7 @@ class LyricFloatPlayer:
         # Show initial tip toast
         self.toast.show(
             "💡 กด [ หรือ ] เพื่อปรับเวลาให้ตรงกับเสียงร้อง | Space เพื่อพัก",
-            color="#a6e3a1",
+            color="#c8ff47",
             duration_ms=2500,
         )
 
@@ -865,6 +860,11 @@ class LyricFloatPlayer:
                     est_box_w = max(self.cfg["box_w"], min(needed_w, 900))
                     x = self.random_safe_x(est_box_w)
                     y = self.screen_h - self.cfg["box_h"] - BOTTOM_SPAWN_OFFSET
+                    # Keep a single active lyric card. Multiple independent
+                    # top-level windows look messy and can overlap on fast songs.
+                    for old_card in self.floating_boxes:
+                        old_card.destroy()
+                    self.floating_boxes.clear()
                     card = FloatingCardItem(
                         self.root, text, x, y, t_str, self.cfg
                     )
