@@ -14,4 +14,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Compile Python sources
-        run: python -m py_compile main.py card_player.py sync_engine.py tap_syncer.py
+        run: >-
+          python -m py_compile
+          main.py modern_app.py modern_overlay.py
+          legacy_main.py card_player.py sync_engine.py tap_syncer.py
