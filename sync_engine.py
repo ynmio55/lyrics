@@ -119,9 +119,25 @@ def search_online_lyrics(query: str):
 
 
 def rank_lyrics_results(results, query="", audio_duration=0.0):
-    """Rank synced lyric candidates using title similarity and audio duration."""
-    q = clean_song_query(query)
-    qn = clean_text(q)
+    """Rank lyric candidates, strongly preferring the same recording duration.
+
+    A title-only match is not enough: live/remaster/TV edits often have different
+    timing and make the vocal run ahead of the displayed lyrics.
+    """
+    results = list(results or [])
+    qn = clean_text(clean_song_query(query))
+
+    # If LRCLIB has a recording close to our actual file length, discard
+    # obviously different edits before scoring.
+    if audio_duration > 0:
+        close = []
+        for item in results:
+            duration = float(item.get("duration") or 0)
+            if duration > 0 and abs(duration - audio_duration) <= 5.0:
+                close.append(item)
+        if close:
+            results = close
+
     def score(item):
         title = clean_text(item.get("trackName", ""))
         artist = clean_text(item.get("artistName", ""))
@@ -129,14 +145,18 @@ def rank_lyrics_results(results, query="", audio_duration=0.0):
             difflib.SequenceMatcher(None, qn, title).ratio(),
             difflib.SequenceMatcher(None, qn, (title + " " + artist).strip()).ratio(),
         ) if qn else 0.0
+
         duration = float(item.get("duration") or 0)
         if audio_duration > 0 and duration > 0:
             diff = abs(duration - audio_duration)
-            duration_score = max(0.0, 1.0 - diff / 20.0)
+            duration_score = max(0.0, 1.0 - diff / 8.0)
         else:
-            duration_score = 0.5
-        return name_score * 0.72 + duration_score * 0.28
-    return sorted(results or [], key=score, reverse=True)
+            duration_score = 0.35
+
+        # Timing correctness matters more than a fuzzy title match.
+        return name_score * 0.35 + duration_score * 0.65
+
+    return sorted(results, key=score, reverse=True)
 
 def auto_align_lyrics(user_lines, reference_lrc_text, start_from_zero=True):
     """
