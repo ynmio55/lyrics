@@ -130,6 +130,23 @@ def make_card_background(
 
 # Preset Visual Styles
 STYLES = {
+    "karaoke_flow": {
+        "name": "Karaoke Flow",
+        "mode": "flow",
+        "box_w": 980,
+        "box_h": 360,
+        "radius": 22,
+        "bg_rgb": (10, 10, 12),
+        "border_rgb": (46, 46, 51),
+        "border_width": 1,
+        "text_color": "#f6f6f7",
+        "past_color": "#77777f",
+        "next_color": "#55555c",
+        "accent_color": "#c8ff47",
+        "font_size": 28,
+        "font_weight": "bold",
+        "line_gap": 62,
+    },
     "dynamic_island": {
         "name": "Focus Player",
         "mode": "island",
@@ -388,6 +405,184 @@ class FloatingCardItem:
             pass
 
 
+class KaraokeFlowHUD:
+    """Persistent scrolling lyrics with progressive character reveal."""
+
+    def __init__(self, parent, screen_w, screen_h, cfg, lyrics, track_name=""):
+        self.parent = parent
+        self.screen_w = screen_w
+        self.screen_h = screen_h
+        self.cfg = cfg
+        self.lyrics = lyrics
+        self.track_name = track_name or "Playing"
+        self.active_index = -1
+        self.previous_index = -1
+        self.transition_started = time.time()
+        self.transition_duration = 0.32
+
+        self.box_w = min(cfg["box_w"], max(720, screen_w - 80))
+        self.box_h = cfg["box_h"]
+
+        self.win = tk.Toplevel(parent)
+        self.win.overrideredirect(True)
+        self.win.attributes("-topmost", True)
+        self.win.configure(bg=TRANS_KEY)
+        try:
+            self.win.wm_attributes("-transparentcolor", TRANS_KEY)
+        except Exception:
+            pass
+
+        x = (screen_w - self.box_w) // 2
+        y = max(70, screen_h - self.box_h - 90)
+        self.win.geometry(f"{self.box_w}x{self.box_h}+{x}+{y}")
+
+        self.canvas = tk.Canvas(
+            self.win,
+            width=self.box_w,
+            height=self.box_h,
+            bg=TRANS_KEY,
+            highlightthickness=0,
+        )
+        self.canvas.pack(fill="both", expand=True)
+
+        self.bg_photo = make_card_background(
+            self.box_w,
+            self.box_h,
+            radius=cfg.get("radius", 22),
+            bg_rgb=cfg.get("bg_rgb", (10, 10, 12)),
+            border_rgb=cfg.get("border_rgb", (46, 46, 51)),
+            border_width=cfg.get("border_width", 1),
+        )
+        self.canvas.create_image(0, 0, anchor="nw", image=self.bg_photo)
+
+        self.canvas.create_text(
+            28, 24,
+            anchor="w",
+            text=self.track_name[:54],
+            font=(get_cached_best_font(), 9, "bold"),
+            fill="#8f8f96",
+        )
+        self.time_id = self.canvas.create_text(
+            self.box_w - 28, 24,
+            anchor="e",
+            text="00:00.0",
+            font=(get_cached_best_font(), 9, "bold"),
+            fill=cfg.get("accent_color", "#c8ff47"),
+        )
+
+        self.center_y = self.box_h // 2 + 8
+        self.line_gap = cfg.get("line_gap", 62)
+        self.visible_ids = []
+        for _ in range(7):
+            item = self.canvas.create_text(
+                self.box_w // 2,
+                self.center_y,
+                text="",
+                font=(get_cached_best_font(), cfg.get("font_size", 28), "bold"),
+                fill=cfg.get("next_color", "#55555c"),
+                justify="center",
+                width=self.box_w - 80,
+            )
+            self.visible_ids.append(item)
+
+        self.progress_bg = self.canvas.create_line(
+            28, self.box_h - 22, self.box_w - 28, self.box_h - 22,
+            fill="#242428", width=3, capstyle="round"
+        )
+        self.progress_fg = self.canvas.create_line(
+            28, self.box_h - 22, 28, self.box_h - 22,
+            fill=cfg.get("accent_color", "#c8ff47"),
+            width=3, capstyle="round"
+        )
+
+    def set_active(self, index):
+        if index == self.active_index:
+            return
+        self.previous_index = self.active_index
+        self.active_index = index
+        self.transition_started = time.time()
+
+    def _revealed_text(self, index, current_time):
+        if index < 0 or index >= len(self.lyrics):
+            return ""
+        start, text = self.lyrics[index]
+        if index + 1 < len(self.lyrics):
+            end = self.lyrics[index + 1][0]
+        else:
+            end = start + max(2.5, min(6.0, len(split_graphemes(text)) * 0.12))
+
+        duration = max(0.6, end - start)
+        frac = min(1.0, max(0.0, (current_time - start) / duration))
+        clusters = split_graphemes(text)
+        if not clusters:
+            return ""
+        count = min(len(clusters), max(1, int(math.ceil(len(clusters) * frac))))
+        return "".join(clusters[:count])
+
+    def update_frame(self, current_time):
+        mins = int(current_time // 60)
+        secs = current_time % 60
+        self.canvas.itemconfigure(self.time_id, text=f"{mins:02d}:{secs:04.1f}")
+
+        if self.active_index < 0:
+            return
+
+        anim = min(1.0, max(0.0, (time.time() - self.transition_started) / self.transition_duration))
+        # smoothstep makes line movement feel like a real lyric app instead of jumping.
+        p = anim * anim * (3.0 - 2.0 * anim)
+        start_idx = self.active_index - 3
+
+        for slot, item_id in enumerate(self.visible_ids):
+            idx = start_idx + slot
+            if idx < 0 or idx >= len(self.lyrics):
+                self.canvas.itemconfigure(item_id, text="")
+                continue
+
+            _, full_text = self.lyrics[idx]
+            relative = idx - self.active_index
+            # During a line change every row travels upward one line-gap.
+            shift = (1.0 - p) * self.line_gap if self.previous_index == self.active_index - 1 else 0.0
+            y = self.center_y + relative * self.line_gap + shift
+
+            if idx == self.active_index:
+                shown = self._revealed_text(idx, current_time)
+                color = self.cfg.get("accent_color", "#c8ff47")
+                size = self.cfg.get("font_size", 28)
+            elif idx < self.active_index:
+                shown = full_text
+                distance = self.active_index - idx
+                color = self.cfg.get("past_color", "#77777f")
+                size = max(16, self.cfg.get("font_size", 28) - distance * 3)
+            else:
+                shown = full_text
+                color = self.cfg.get("next_color", "#55555c")
+                size = max(17, self.cfg.get("font_size", 28) - 4)
+
+            self.canvas.coords(item_id, self.box_w // 2, y)
+            self.canvas.itemconfigure(
+                item_id,
+                text=shown,
+                fill=color,
+                font=(get_cached_best_font(), size, "bold" if idx == self.active_index else "normal"),
+            )
+
+        start = self.lyrics[self.active_index][0]
+        if self.active_index + 1 < len(self.lyrics):
+            end = self.lyrics[self.active_index + 1][0]
+        else:
+            end = start + 4.0
+        dur = max(0.1, end - start)
+        frac = min(1.0, max(0.0, (current_time - start) / dur))
+        x2 = 28 + (self.box_w - 56) * frac
+        self.canvas.coords(self.progress_fg, 28, self.box_h - 22, x2, self.box_h - 22)
+
+    def destroy(self):
+        try:
+            self.win.destroy()
+        except Exception:
+            pass
+
+
 class DynamicIslandHUD:
     """Centered persistent lyric HUD with current/next lines and progress."""
 
@@ -547,7 +742,7 @@ class LyricFloatPlayer:
         root,
         lyrics,
         audio_path=None,
-        style="dynamic_island",
+        style="karaoke_flow",
         initial_offset=0.0,
         on_finished=None,
     ):
@@ -564,7 +759,7 @@ class LyricFloatPlayer:
         )
 
         self.style_keys = list(STYLES.keys())
-        self.style_key = style if style in STYLES else "dynamic_island"
+        self.style_key = style if style in STYLES else "karaoke_flow"
         self.cfg = STYLES[self.style_key]
 
         # Cache font for text measurement (avoid creating new Font objects every tick)
@@ -583,6 +778,7 @@ class LyricFloatPlayer:
         self.next_lyric_idx = 0
         self.floating_boxes = []
         self.island_hud = None
+        self.flow_hud = None
         self.last_frame_time = None
         self.current_side = "left"
         self.is_running = False
@@ -750,6 +946,9 @@ class LyricFloatPlayer:
         if self.island_hud:
             self.island_hud.destroy()
             self.island_hud = None
+        if self.flow_hud:
+            self.flow_hud.destroy()
+            self.flow_hud = None
         for b in self.floating_boxes:
             b.destroy()
         self.floating_boxes.clear()
@@ -758,6 +957,12 @@ class LyricFloatPlayer:
             self.island_hud = DynamicIslandHUD(
                 self.root, self.screen_w, self.screen_h, self.cfg, self.track_name
             )
+        elif self.cfg.get("mode") == "flow":
+            self.flow_hud = KaraokeFlowHUD(
+                self.root, self.screen_w, self.screen_h, self.cfg, self.lyrics, self.track_name
+            )
+            if self.next_lyric_idx > 0:
+                self.flow_hud.set_active(self.next_lyric_idx - 1)
 
         self.toast.show(f"STYLE  {self.cfg['name']}", color="#a9a9b2")
 
@@ -797,10 +1002,14 @@ class LyricFloatPlayer:
             except Exception as e:
                 print(f"Audio playback warning: {e}")
 
-        # If starting in island mode, create the persistent HUD
+        # Persistent lyric surfaces are created once and updated throughout the song.
         if self.cfg.get("mode") == "island":
             self.island_hud = DynamicIslandHUD(
                 self.root, self.screen_w, self.screen_h, self.cfg, self.track_name
+            )
+        elif self.cfg.get("mode") == "flow":
+            self.flow_hud = KaraokeFlowHUD(
+                self.root, self.screen_w, self.screen_h, self.cfg, self.lyrics, self.track_name
             )
 
         # Show initial tip toast
@@ -857,7 +1066,18 @@ class LyricFloatPlayer:
                     else t_stamp + 4.0
                 )
 
-                if self.cfg.get("mode") == "island":
+                if self.cfg.get("mode") == "flow":
+                    if not self.flow_hud:
+                        self.flow_hud = KaraokeFlowHUD(
+                            self.root,
+                            self.screen_w,
+                            self.screen_h,
+                            self.cfg,
+                            self.lyrics,
+                            self.track_name,
+                        )
+                    self.flow_hud.set_active(self.next_lyric_idx)
+                elif self.cfg.get("mode") == "island":
                     if not self.island_hud:
                         self.island_hud = DynamicIslandHUD(
                             self.root,
@@ -885,9 +1105,11 @@ class LyricFloatPlayer:
 
                 self.next_lyric_idx += 1
 
-            # Update island HUD frame
+            # Update persistent lyric surfaces every frame.
             if self.island_hud:
                 self.island_hud.update_frame(raw_audio_t)
+            if self.flow_hud:
+                self.flow_hud.update_frame(calibrated_t)
 
             # Move floating cards upward
             if self.floating_boxes:
@@ -931,6 +1153,9 @@ class LyricFloatPlayer:
         if self.island_hud:
             self.island_hud.destroy()
             self.island_hud = None
+        if self.flow_hud:
+            self.flow_hud.destroy()
+            self.flow_hud = None
 
         for box in self.floating_boxes:
             box.destroy()
@@ -962,7 +1187,7 @@ class LyricFloatPlayer:
             self.on_finished(self.sync_offset)
 
 
-def play_standalone(lyrics, audio_path=None, style="dynamic_island"):
+def play_standalone(lyrics, audio_path=None, style="karaoke_flow"):
     root = tk.Tk()
     root.withdraw()
 
@@ -987,4 +1212,4 @@ if __name__ == "__main__":
         (3.5, "迷わずに今 矛盾だらけの世界を"),
         (7.0, "その手で撃ち放て"),
     ]
-    play_standalone(sample_lyrics, style="dynamic_island")
+    play_standalone(sample_lyrics, style="karaoke_flow")
