@@ -139,6 +139,15 @@ class ModernLyricOverlay(QWidget):
         self.player.setSource(QUrl.fromLocalFile(audio_path))
         self.player.mediaStatusChanged.connect(self._on_media_status)
 
+        # QMediaPlayer.position() can advance in coarse backend steps on Linux.
+        # The old player moved cards from a continuous frame clock, which is why
+        # its motion felt connected. Keep audio sync, but interpolate smoothly
+        # between media-position updates with a monotonic high-resolution clock.
+        self._clock_media_s = 0.0
+        self._clock_perf = time.perf_counter()
+        self.player.positionChanged.connect(self._sync_media_clock)
+        self.player.playbackStateChanged.connect(self._sync_playback_clock_state)
+
         self.timer = QTimer(self)
         self.timer.setTimerType(Qt.TimerType.PreciseTimer)
         self.timer.setInterval(16)
@@ -378,8 +387,29 @@ class ModernLyricOverlay(QWidget):
         self.raise_()
         self._apply_x11_global_overlay_hints()
 
+    def _sync_media_clock(self, position_ms: int) -> None:
+        """Re-anchor the smooth clock to the real media backend."""
+        self._clock_media_s = max(0.0, float(position_ms) / 1000.0)
+        self._clock_perf = time.perf_counter()
+
+    def _sync_playback_clock_state(self, state) -> None:
+        # Re-anchor on every play/pause transition so interpolation never jumps.
+        self._clock_media_s = max(0.0, self.player.position() / 1000.0)
+        self._clock_perf = time.perf_counter()
+
     def _audio_time(self) -> float:
-        return max(0.0, self.player.position() / 1000.0)
+        """Continuous playback time, corrected by QMediaPlayer but rendered smoothly."""
+        base = self._clock_media_s
+        if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            base += max(0.0, time.perf_counter() - self._clock_perf)
+
+        # Guard against a backend discontinuity/seek without adding visible jitter.
+        raw = max(0.0, self.player.position() / 1000.0)
+        if abs(base - raw) > 0.22:
+            self._clock_media_s = raw
+            self._clock_perf = time.perf_counter()
+            return raw
+        return max(0.0, base)
 
     def _calibrated_time(self) -> float:
         return self._audio_time() - self.offset
@@ -438,8 +468,8 @@ class ModernLyricOverlay(QWidget):
             self._spawn(self.next_index)
             self.next_index += 1
 
-        # Cards move from audio time, not accumulated frame delta. A dropped frame
-        # therefore cannot create permanent drift or a sudden catch-up jump.
+        # Cards use the interpolated audio clock: audio-locked like the new engine,
+        # but visually continuous like the original floating-card player.
         self.cards = [
             card
             for card in self.cards
@@ -461,20 +491,23 @@ class ModernLyricOverlay(QWidget):
             return self.card_margin
         return self.width() - card.width - self.card_margin
 
-    def _revealed_text(self, card: LyricCard, current: float) -> str:
-        units = _reveal_units(card.text)
-        if not units:
-            return card.text
+    def _reveal_fraction(self, card: LyricCard, current: float) -> float:
+        """Continuous reveal progress for the active lyric.
 
+        The first implementation revealed one grapheme every ~35 ms and felt
+        naturally continuous, but a fixed speed could finish after the singer.
+        This keeps that visual character while adapting to each LRC line:
+        start slightly early, reveal continuously, and finish before the line ends.
+        """
         duration = max(0.50, card.end - card.start)
-        lead = min(0.16, duration * 0.08)
-        reveal_duration = max(0.36, duration * 0.72)
+        lead = min(0.14, duration * 0.08)
+        reveal_duration = max(0.34, duration * 0.72)
         fraction = (current - card.start + lead) / reveal_duration
         fraction = max(0.0, min(1.0, fraction))
-        fraction = math.pow(fraction, 0.80) if fraction > 0.0 else 0.0
-
-        count = max(1, min(len(units), math.ceil(len(units) * fraction)))
-        return "".join(units[:count])
+        # Very light ease-out. No discrete word/chunk steps.
+        if 0.0 < fraction < 1.0:
+            fraction = 1.0 - math.pow(1.0 - fraction, 1.12)
+        return fraction
 
     def _card_alpha(self, y: float, height: float) -> float:
         # Fade only near the top edge. Finished lyrics remain visible for a while.
@@ -520,23 +553,45 @@ class ModernLyricOverlay(QWidget):
             )
 
             painter.setFont(self.font_lyric)
-            text_color = QColor(TEXT if active else QColor("#C9C9CE"))
-            text_color.setAlphaF(alpha)
-            painter.setPen(text_color)
-
-            shown = self._revealed_text(card, current) if active else card.text
-            painter.drawText(
-                QRectF(
-                    rect.left() + 28,
-                    rect.top() + 40,
-                    rect.width() - 56,
-                    rect.height() - 52,
-                ),
+            text_rect = QRectF(
+                rect.left() + 28,
+                rect.top() + 40,
+                rect.width() - 56,
+                rect.height() - 52,
+            )
+            text_flags = (
                 Qt.AlignmentFlag.AlignHCenter
                 | Qt.AlignmentFlag.AlignVCenter
-                | Qt.TextFlag.TextWordWrap,
-                shown,
+                | Qt.TextFlag.TextWordWrap
             )
+
+            if active:
+                # Render the complete shaped string once, then reveal it with a
+                # continuously moving clip edge. Unlike word-by-word replacement,
+                # this never jumps and never breaks Thai combining glyphs.
+                reveal = self._reveal_fraction(card, current)
+                actual = painter.boundingRect(text_rect, int(text_flags), card.text)
+                clip_width = max(0.0, actual.width() * reveal)
+
+                painter.save()
+                painter.setClipRect(
+                    QRectF(
+                        actual.left() - 2.0,
+                        actual.top() - 3.0,
+                        clip_width + 4.0,
+                        actual.height() + 6.0,
+                    )
+                )
+                text_color = QColor(TEXT)
+                text_color.setAlphaF(alpha)
+                painter.setPen(text_color)
+                painter.drawText(text_rect, text_flags, card.text)
+                painter.restore()
+            else:
+                text_color = QColor("#C9C9CE")
+                text_color.setAlphaF(alpha)
+                painter.setPen(text_color)
+                painter.drawText(text_rect, text_flags, card.text)
 
         self._paint_hud(painter)
 
