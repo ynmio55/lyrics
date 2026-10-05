@@ -498,9 +498,10 @@ class EasyLyricStudio(tk.Tk):
         ).pack(side="left", padx=(0, 8))
 
         self.style_var = tk.StringVar(
-            value="Focus Player"
+            value="Karaoke Flow"
         )
         self.style_map = {
+            "Karaoke Flow": "karaoke_flow",
             "Focus Player": "dynamic_island",
             "Minimal Card": "floating_cards",
             "Clean Text": "text_only",
