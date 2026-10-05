@@ -21,7 +21,7 @@ import unicodedata
 from PySide6.QtCore import Qt, QTimer, QUrl, QRectF, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QKeyEvent, QPainter, QPen
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QWidget
 
 
 ACCENT = QColor("#D7FF45")
@@ -112,15 +112,21 @@ class ModernLyricOverlay(QWidget):
             Qt.WindowType.Window
             | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.WindowTransparentForInput
+            | Qt.WindowType.WindowDoesNotAcceptFocus
         )
         if sys.platform.startswith("linux"):
-            # Qt's X11 equivalent of Tk overrideredirect(): keep this surface
-            # unmanaged so app/workspace switching does not hide the lyrics.
+            # The pre-Qt player used overrideredirect() lyric windows. The key
+            # behavior was that the desktop behind the lyrics stayed usable.
+            # Keep the modern full-screen compositor unmanaged but completely
+            # transparent to mouse/keyboard input.
             flags |= Qt.WindowType.X11BypassWindowManagerHint
         self.setWindowFlags(flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         screen = QApplication.primaryScreen()
         if screen is not None:
@@ -156,15 +162,136 @@ class ModernLyricOverlay(QWidget):
         self.font_meta = QFont(self.font_family, 9, QFont.Weight.DemiBold)
         self.font_hint = QFont(self.font_family, 9, QFont.Weight.Medium)
 
+        # Separate tiny interactive window. The large lyric compositor itself
+        # is click-through, exactly so Chrome/VS Code/desktop remain clickable.
+        self.controls = None
+        self.offset_label = None
+        self.pause_button = None
+
     def start(self) -> None:
         self.show()
         self.raise_()
-        self.activateWindow()
-        self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
         self._apply_x11_global_overlay_hints()
+        if self.controls is not None:
+            try:
+                self.controls.raise_()
+            except Exception:
+                pass
+        self._show_controls()
         self.player.play()
         self.timer.start()
         self.topmost_timer.start()
+
+    def _show_controls(self) -> None:
+        """Small interactive bar; everything else on screen remains clickable."""
+        if self.controls is not None:
+            try:
+                self.controls.show()
+                self.controls.raise_()
+                return
+            except Exception:
+                self.controls = None
+
+        bar = QWidget()
+        flags = (
+            Qt.WindowType.Window
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
+        if sys.platform.startswith("linux"):
+            flags |= Qt.WindowType.X11BypassWindowManagerHint
+        bar.setWindowFlags(flags)
+        bar.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        bar.setObjectName("OverlayControls")
+        bar.setStyleSheet(
+            """
+            QWidget#OverlayControls {
+                background: #101012;
+                border: 1px solid #303036;
+                border-radius: 12px;
+            }
+            QLabel {
+                color: #D7FF45;
+                background: transparent;
+                border: none;
+                font-size: 11px;
+                font-weight: 700;
+                padding: 0 6px;
+            }
+            QPushButton {
+                color: #DADADF;
+                background: #1B1B1F;
+                border: 1px solid #303036;
+                border-radius: 8px;
+                padding: 6px 9px;
+                font-size: 10px;
+                font-weight: 650;
+            }
+            QPushButton:hover {
+                background: #25252A;
+                border-color: #414148;
+            }
+            QPushButton#Close {
+                color: #E9E9EC;
+                background: #26262B;
+            }
+            """
+        )
+
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(8, 7, 8, 7)
+        layout.setSpacing(6)
+
+        self.offset_label = QLabel(f"OFFSET {self.offset:+.2f}s")
+        layout.addWidget(self.offset_label)
+
+        delay = QPushButton("+0.1")
+        delay.setToolTip("Delay lyrics")
+        delay.clicked.connect(lambda: self.adjust_offset(+0.10))
+        layout.addWidget(delay)
+
+        advance = QPushButton("-0.1")
+        advance.setToolTip("Advance lyrics")
+        advance.clicked.connect(lambda: self.adjust_offset(-0.10))
+        layout.addWidget(advance)
+
+        self.pause_button = QPushButton("PAUSE")
+        self.pause_button.clicked.connect(self.toggle_pause)
+        layout.addWidget(self.pause_button)
+
+        close = QPushButton("CLOSE")
+        close.setObjectName("Close")
+        close.clicked.connect(self.finish)
+        layout.addWidget(close)
+
+        bar.adjustSize()
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            geo = screen.availableGeometry()
+            bar.move(geo.right() - bar.width() - 22, geo.top() + 20)
+
+        self.controls = bar
+        bar.show()
+        bar.raise_()
+
+    def adjust_offset(self, delta: float) -> None:
+        self.offset = round(self.offset + float(delta), 2)
+        if self.offset_label is not None:
+            self.offset_label.setText(f"OFFSET {self.offset:+.2f}s")
+        self.offset_changed.emit(self.offset)
+        self.update()
+
+    def toggle_pause(self) -> None:
+        if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.player.pause()
+            self._paused = True
+            if self.pause_button is not None:
+                self.pause_button.setText("RESUME")
+        else:
+            self.player.play()
+            self._paused = False
+            if self.pause_button is not None:
+                self.pause_button.setText("PAUSE")
 
     def _apply_x11_global_overlay_hints(self) -> None:
         """Mark the X11/XWayland overlay as sticky and above on all workspaces."""
@@ -445,25 +572,16 @@ class ModernLyricOverlay(QWidget):
             return
 
         if key == Qt.Key.Key_Space:
-            if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-                self.player.pause()
-                self._paused = True
-            else:
-                self.player.play()
-                self._paused = False
+            self.toggle_pause()
             self.update()
             return
 
         if key in (Qt.Key.Key_BracketLeft, Qt.Key.Key_Left):
-            self.offset = round(self.offset + 0.10, 2)
-            self.offset_changed.emit(self.offset)
-            self.update()
+            self.adjust_offset(+0.10)
             return
 
         if key in (Qt.Key.Key_BracketRight, Qt.Key.Key_Right):
-            self.offset = round(self.offset - 0.10, 2)
-            self.offset_changed.emit(self.offset)
-            self.update()
+            self.adjust_offset(-0.10)
             return
 
         super().keyPressEvent(event)
@@ -480,5 +598,11 @@ class ModernLyricOverlay(QWidget):
         self.timer.stop()
         self.topmost_timer.stop()
         self.player.stop()
+        if self.controls is not None:
+            try:
+                self.controls.close()
+            except Exception:
+                pass
+            self.controls = None
         self.finished.emit(self.offset)
         self.close()
