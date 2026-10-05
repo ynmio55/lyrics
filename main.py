@@ -498,13 +498,13 @@ class EasyLyricStudio(tk.Tk):
         ).pack(side="left", padx=(0, 8))
 
         self.style_var = tk.StringVar(
-            value="Karaoke Flow"
+            value="Floating Lyrics"
         )
         self.style_map = {
-            "Karaoke Flow": "karaoke_flow",
+            "Floating Lyrics": "floating_cards",
             "Focus Player": "dynamic_island",
-            "Minimal Card": "floating_cards",
             "Clean Text": "text_only",
+            "Karaoke Flow": "karaoke_flow",
         }
 
         self.cb_style = ttk.Combobox(
