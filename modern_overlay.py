@@ -10,8 +10,11 @@ This implementation paints every card into one transparent Qt surface at 60 fps.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ctypes
+import ctypes.util
 import math
 import re
+import sys
 import time
 import unicodedata
 
@@ -105,15 +108,16 @@ class ModernLyricOverlay(QWidget):
         self._end_timer_started = False
 
         self.setWindowTitle("Lyric Studio Overlay")
-        # Use a real top-level window instead of Qt.Tool. Some Linux desktops
-        # hide/de-prioritize Tool windows when another application becomes active.
-        # Keeping the overlay as a normal frameless top-level window makes the
-        # lyrics remain visible while switching between browser/editor/apps.
-        self.setWindowFlags(
+        flags = (
             Qt.WindowType.Window
             | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
         )
+        if sys.platform.startswith("linux"):
+            # Qt's X11 equivalent of Tk overrideredirect(): keep this surface
+            # unmanaged so app/workspace switching does not hide the lyrics.
+            flags |= Qt.WindowType.X11BypassWindowManagerHint
+        self.setWindowFlags(flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -157,15 +161,95 @@ class ModernLyricOverlay(QWidget):
         self.raise_()
         self.activateWindow()
         self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+        self._apply_x11_global_overlay_hints()
         self.player.play()
         self.timer.start()
         self.topmost_timer.start()
 
+    def _apply_x11_global_overlay_hints(self) -> None:
+        """Mark the X11/XWayland overlay as sticky and above on all workspaces."""
+        if not sys.platform.startswith("linux"):
+            return
+
+        app = QApplication.instance()
+        if app is None or app.platformName().lower() != "xcb":
+            return
+
+        lib_name = ctypes.util.find_library("X11")
+        if not lib_name:
+            return
+
+        display = None
+        try:
+            x11 = ctypes.cdll.LoadLibrary(lib_name)
+            x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+            x11.XOpenDisplay.restype = ctypes.c_void_p
+            x11.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+            x11.XInternAtom.restype = ctypes.c_ulong
+            x11.XChangeProperty.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_ulong,
+                ctypes.c_ulong,
+                ctypes.c_ulong,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.POINTER(ctypes.c_ubyte),
+                ctypes.c_int,
+            ]
+            x11.XFlush.argtypes = [ctypes.c_void_p]
+            x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+
+            display = x11.XOpenDisplay(None)
+            if not display:
+                return
+
+            window = ctypes.c_ulong(int(self.winId()))
+            cardinal = x11.XInternAtom(display, b"CARDINAL", 0)
+            atom_type = x11.XInternAtom(display, b"ATOM", 0)
+            desktop_prop = x11.XInternAtom(display, b"_NET_WM_DESKTOP", 0)
+            state_prop = x11.XInternAtom(display, b"_NET_WM_STATE", 0)
+            above_atom = x11.XInternAtom(display, b"_NET_WM_STATE_ABOVE", 0)
+            sticky_atom = x11.XInternAtom(display, b"_NET_WM_STATE_STICKY", 0)
+
+            all_desktops = (ctypes.c_ulong * 1)(0xFFFFFFFF)
+            x11.XChangeProperty(
+                display,
+                window,
+                desktop_prop,
+                cardinal,
+                32,
+                0,
+                ctypes.cast(all_desktops, ctypes.POINTER(ctypes.c_ubyte)),
+                1,
+            )
+
+            states = (ctypes.c_ulong * 2)(above_atom, sticky_atom)
+            x11.XChangeProperty(
+                display,
+                window,
+                state_prop,
+                atom_type,
+                32,
+                0,
+                ctypes.cast(states, ctypes.POINTER(ctypes.c_ubyte)),
+                2,
+            )
+            x11.XFlush(display)
+        except Exception:
+            return
+        finally:
+            if display:
+                try:
+                    x11.XCloseDisplay(display)
+                except Exception:
+                    pass
+
     def _keep_on_top(self) -> None:
-        """Keep the overlay above other application windows without stealing focus."""
+        """Keep the overlay above every app/workspace without stealing focus."""
         if self._closing or not self.isVisible():
             return
         self.raise_()
+        self._apply_x11_global_overlay_hints()
 
     def _audio_time(self) -> float:
         return max(0.0, self.player.position() / 1000.0)
