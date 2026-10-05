@@ -186,7 +186,11 @@ def get_audio_duration(filepath):
         import pygame
 
         if not pygame.mixer.get_init():
-            pygame.mixer.init()
+            try:
+                pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=4096)
+                pygame.mixer.init()
+            except Exception:
+                pygame.mixer.init()
         sound = pygame.mixer.Sound(filepath)
         return sound.get_length()
     except Exception:

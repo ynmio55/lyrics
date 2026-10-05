@@ -5,13 +5,47 @@ Designed to be as effortless as possible:
 """
 
 import os
+import shutil
+import subprocess
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from card_player import LyricFloatPlayer
+from card_player import LyricFloatPlayer, init_audio
 import sync_engine
 from tap_syncer import TapSyncDialog
+
+# Pre-initialize audio with safe Linux buffer
+init_audio()
+
+
+def choose_file_native(title="เลือกไฟล์", file_filter="*.*", file_types=None):
+    """Opens a modern native GNOME/Linux file chooser using zenity if available."""
+    zenity = shutil.which("zenity")
+    if zenity:
+        cmd = [zenity, "--file-selection", f"--title={title}"]
+        # Default starting directory: check Music, Downloads, or Home
+        home = os.path.expanduser("~")
+        music_dir = os.path.join(home, "Music")
+        downloads_dir = os.path.join(home, "Downloads")
+        start_dir = music_dir if os.path.isdir(music_dir) else (downloads_dir if os.path.isdir(downloads_dir) else home)
+        cmd.append(f"--filename={start_dir}/")
+        
+        if file_filter:
+            cmd.append(f"--file-filter={file_filter}")
+        try:
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout.strip()
+            return None
+        except Exception:
+            pass
+
+    # Fallback to standard Tkinter dialog
+    return filedialog.askopenfilename(
+        title=title,
+        filetypes=file_types or [("All Files", "*.*")],
+    )
 
 
 class EasyLyricStudio(tk.Tk):
@@ -562,9 +596,10 @@ class EasyLyricStudio(tk.Tk):
         threading.Thread(target=worker, daemon=True).start()
 
     def browse_audio(self):
-        filepath = filedialog.askopenfilename(
-            title="เลือกไฟล์เพลง MP3",
-            filetypes=[("Audio Files", "*.mp3 *.wav *.ogg *.flac")],
+        filepath = choose_file_native(
+            title="เลือกไฟล์เพลง MP3 / Audio",
+            file_filter="ไฟล์เสียง (mp3, wav, ogg, flac, m4a) | *.mp3 *.wav *.ogg *.flac *.m4a",
+            file_types=[("Audio Files", "*.mp3 *.wav *.ogg *.flac *.m4a")],
         )
         if filepath:
             self.auto_setup_song(filepath)
@@ -592,8 +627,10 @@ class EasyLyricStudio(tk.Tk):
             )
 
     def load_lrc_dialog(self):
-        filepath = filedialog.askopenfilename(
-            title="เลือกไฟล์ .lrc", filetypes=[("LRC Lyrics", "*.lrc")]
+        filepath = choose_file_native(
+            title="เลือกไฟล์เนื้อเพลง .lrc",
+            file_filter="ไฟล์เนื้อเพลง (.lrc) | *.lrc",
+            file_types=[("LRC Lyrics", "*.lrc")],
         )
         if filepath:
             self.load_lrc_file_path(filepath)

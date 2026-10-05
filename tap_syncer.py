@@ -7,6 +7,7 @@ import time
 import tkinter as tk
 from tkinter import ttk
 import pygame
+from card_player import init_audio
 
 
 class TapSyncDialog(tk.Toplevel):
@@ -184,8 +185,7 @@ class TapSyncDialog(tk.Toplevel):
     def toggle_play(self):
         if not self.is_playing:
             try:
-                if not pygame.mixer.get_init():
-                    pygame.mixer.init()
+                init_audio()
                 pygame.mixer.music.load(self.audio_path)
                 pygame.mixer.music.play()
                 self.start_time = time.time()

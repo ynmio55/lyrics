@@ -5,25 +5,57 @@ Press ESC at any time to stop playback.
 """
 
 import os
+import sys
 import time
 import tkinter as tk
 import tkinter.font as tkfont
+
+# Set SDL audio driver to match PipeWire before importing pygame
+if sys.platform.startswith("linux"):
+    os.environ.setdefault("SDL_AUDIODRIVER", "pipewire")
+
 import pygame
+
+
+def init_audio():
+    """Initializes pygame mixer with large audio buffer for Linux (PipeWire/PulseAudio) to prevent stuttering."""
+    if not pygame.mixer.get_init():
+        # Try multiple buffer sizes, largest first for best stability
+        for buf_size in (8192, 4096, 2048):
+            try:
+                pygame.mixer.pre_init(frequency=48000, size=-16, channels=2, buffer=buf_size)
+                pygame.mixer.init()
+                return
+            except Exception:
+                continue
+        # Last resort: let SDL pick defaults
+        try:
+            pygame.mixer.init()
+        except Exception as e:
+            print(f"Mixer init error: {e}")
+
 
 # Default animation settings
 RISE_SPEED = 65
 BOTTOM_SPAWN_OFFSET = 120
 
+# Animation tick interval (ms) - 30fps is plenty smooth for floating text
+# and reduces X11 round-trip pressure that causes audio stuttering on Linux
+TICK_INTERVAL = 33
+
 
 def get_best_font():
-    """Selects the cleanest, most modern font available on Windows."""
+    """Selects the cleanest, most modern font available across OS (Linux/Windows)."""
     try:
         fams = tkfont.families()
         for cand in [
+            "Noto Sans Thai",
+            "Sarabun",
             "Segoe UI Variable Display",
             "Segoe UI",
             "Leelawadee UI",
             "Bahnschrift",
+            "DejaVu Sans",
         ]:
             if cand in fams:
                 return cand
@@ -32,7 +64,17 @@ def get_best_font():
     return "Helvetica"
 
 
-BEST_FONT = get_best_font()
+_BEST_FONT = None
+
+def get_cached_best_font():
+    """Lazy getter for best font — only resolves when Tk mainloop is active."""
+    global _BEST_FONT
+    if _BEST_FONT is None:
+        _BEST_FONT = get_best_font()
+    return _BEST_FONT
+
+# For backward compatibility — will be updated on first actual use
+BEST_FONT = "Helvetica"
 
 # Preset Styles
 STYLES = {
@@ -130,7 +172,17 @@ class LyricCard:
     def __init__(self, parent, text, x, y, style_config):
         self.win = tk.Toplevel(parent)
         self.cfg = style_config
-        self.box_w = self.cfg["box_w"]
+        self.full_text = text
+        font_spec = (get_cached_best_font(), self.cfg["font_size"], self.cfg["font_weight"])
+        
+        # Calculate dynamic width to prevent text truncation
+        f_measure = tkfont.Font(font=font_spec)
+        text_width = f_measure.measure(text)
+        
+        # Card width dynamically fits text with padding, within reasonable min/max
+        base_w = self.cfg["box_w"]
+        needed_w = text_width + 80
+        self.box_w = max(base_w, min(needed_w, 900))
         self.box_h = self.cfg["box_h"]
 
         # Borderless & Topmost window
@@ -148,7 +200,6 @@ class LyricCard:
         self.win.geometry(f"{self.box_w}x{self.box_h}+{int(x)}+{int(y)}")
         self.win.resizable(False, False)
 
-        self.full_text = text
         self.canvas = tk.Canvas(
             self.win,
             width=self.box_w,
@@ -160,8 +211,7 @@ class LyricCard:
 
         center_x = self.box_w // 2
         center_y = self.box_h // 2
-        font_spec = (BEST_FONT, self.cfg["font_size"], self.cfg["font_weight"])
-        wrap_w = self.box_w - 36
+        wrap_w = self.box_w - 40
 
         # Draw rounded card if requested
         if self.cfg.get("has_card"):
@@ -227,14 +277,18 @@ class LyricCard:
         if not self.is_alive:
             return
         try:
-            if self.typewriter_index <= len(self.full_text):
+            text_len = len(self.full_text)
+            if self.typewriter_index <= text_len:
                 sub_text = self.full_text[: self.typewriter_index]
                 if self.shadow_id:
                     self.canvas.itemconfigure(self.shadow_id, text=sub_text)
                 self.canvas.itemconfigure(self.text_id, text=sub_text)
 
-                self.typewriter_index += 1
-                self.win.after(60, self.typewriter)
+                if self.typewriter_index < text_len:
+                    # Advance by 2, but clamp to text_len so we never skip past the end
+                    self.typewriter_index = min(self.typewriter_index + 2, text_len)
+                    self.win.after(90, self.typewriter)
+                # else: full text displayed, done
         except tk.TclError:
             self.is_alive = False
 
@@ -263,6 +317,10 @@ class LyricFloatPlayer:
         self.root = root
         self.style_key = style if style in STYLES else "text_only"
         self.cfg = STYLES[self.style_key]
+
+        # Cache font for text measurement (avoid creating new Font objects every tick)
+        self._font_spec = (get_cached_best_font(), self.cfg["font_size"], self.cfg["font_weight"])
+        self._cached_font = None  # lazy init (needs Tk mainloop)
 
         # Filter out empty or whitespace-only lines
         self.lyrics = sorted(
@@ -304,12 +362,19 @@ class LyricFloatPlayer:
         )
         stop_btn.pack(expand=True, fill="both", padx=2, pady=2)
 
-    def random_safe_x(self):
+    def _get_font(self):
+        """Returns cached Font object for text measurement."""
+        if self._cached_font is None:
+            self._cached_font = tkfont.Font(font=self._font_spec)
+        return self._cached_font
+
+    def random_safe_x(self, box_w=None):
+        if box_w is None:
+            box_w = self.cfg["box_w"]
         center_x = self.screen_w // 2
-        box_w = self.cfg["box_w"]
-        spacing = box_w + 60
-        left_x = center_x - spacing
-        right_x = center_x + 60
+        spacing = box_w + 50
+        left_x = max(20, center_x - spacing)
+        right_x = min(self.screen_w - box_w - 20, center_x + 50)
 
         if self.current_side == "left":
             self.current_side = "right"
@@ -326,8 +391,7 @@ class LyricFloatPlayer:
         # Play audio if available
         if self.audio_path and os.path.exists(self.audio_path):
             try:
-                if not pygame.mixer.get_init():
-                    pygame.mixer.init()
+                init_audio()
                 pygame.mixer.music.load(self.audio_path)
                 pygame.mixer.music.play()
             except Exception as e:
@@ -352,7 +416,12 @@ class LyricFloatPlayer:
             and self.lyrics[self.next_lyric_idx][0] <= elapsed
         ):
             _, text = self.lyrics[self.next_lyric_idx]
-            x = self.random_safe_x()
+
+            # Estimate card width from text using cached font
+            needed_w = self._get_font().measure(text) + 80
+            est_box_w = max(self.cfg["box_w"], min(needed_w, 900))
+
+            x = self.random_safe_x(est_box_w)
             y = self.screen_h - box_h - BOTTOM_SPAWN_OFFSET
             box = LyricCard(self.root, text, x, y, self.cfg)
             self.boxes.append(box)
@@ -371,8 +440,9 @@ class LyricFloatPlayer:
         self.boxes = still_visible
 
         # Continue loop if there are lyrics remaining or cards on screen
+        # Use TICK_INTERVAL (30fps) instead of 16ms (60fps) to reduce X11 pressure
         if self.next_lyric_idx < len(self.lyrics) or self.boxes:
-            self.root.after(16, self.tick)
+            self.root.after(TICK_INTERVAL, self.tick)
         else:
             self.stop()
 
