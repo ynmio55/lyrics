@@ -1,2 +1,7 @@
+<<<<<<< HEAD
 pygame>=2.5
 Pillow>=10.0
+=======
+pygame>=2.6,<3
+Pillow>=10,<13
+>>>>>>> 2a338ddd4101e333d971bdae2cf2fd9524e5598d
