@@ -111,6 +111,40 @@ def split_graphemes(text: str):
     return clusters
 
 
+def split_reveal_units(text: str):
+    """Return readable reveal chunks.
+
+    Space-delimited lyrics reveal a whole word at a time so a word never sits
+    half-drawn while it is already being sung. Scripts without spaces fall
+    back to small grapheme groups.
+    """
+    clusters = split_graphemes(text)
+    if not clusters:
+        return []
+
+    if any(ch.isspace() for ch in text.strip()):
+        units = []
+        current = ""
+        for cluster in clusters:
+            current += cluster
+            if cluster.isspace():
+                if current.strip():
+                    units.append(current)
+                    current = ""
+                elif units:
+                    units[-1] += current
+                    current = ""
+        if current:
+            units.append(current)
+        return units
+
+    chunk_size = 2 if len(clusters) <= 24 else 3
+    return [
+        "".join(clusters[i : i + chunk_size])
+        for i in range(0, len(clusters), chunk_size)
+    ]
+
+
 def make_card_background(
     width, height, radius, bg_rgb, border_rgb, border_width=2
 ):
@@ -365,6 +399,7 @@ class FloatingCardItem:
         # the lyric line's own time window instead of a fixed typewriter speed.
         self.full_text = text
         self.clusters = split_graphemes(text)
+        self.reveal_units = split_reveal_units(text)
         self.start_time = float(start_time)
         self.end_time = float(end_time) if end_time is not None else self.start_time + 3.5
         self.last_reveal_count = -1
@@ -387,16 +422,35 @@ class FloatingCardItem:
             self.is_alive = False
 
     def update_reveal(self, current_time):
-        """Reveal this lyric progressively across its LRC time window."""
-        if not self.is_alive or not self.clusters:
+        """Reveal readable chunks slightly ahead of the raw line interval.
+
+        Plain LRC only gives line timestamps, not exact word timestamps. Revealing
+        across 100% of the line interval makes the last word appear too late.
+        We therefore start a little early and finish around 76% of the interval,
+        then keep the complete line visible while the card continues upward.
+        """
+        if not self.is_alive or not self.reveal_units:
             return
+
         duration = max(0.45, self.end_time - self.start_time)
-        frac = min(1.0, max(0.0, (current_time - self.start_time) / duration))
-        count = min(len(self.clusters), max(1, int(math.ceil(len(self.clusters) * frac))))
+        lead = min(0.18, duration * 0.10)
+        reveal_duration = max(0.32, duration * 0.76)
+
+        frac = (current_time - self.start_time + lead) / reveal_duration
+        frac = min(1.0, max(0.0, frac))
+        # Gentle ease-out: lyrics appear a little faster at the beginning,
+        # avoiding the visual feeling that the text is chasing the singer.
+        frac = math.pow(frac, 0.78) if frac > 0.0 else 0.0
+
+        count = min(
+            len(self.reveal_units),
+            max(1, int(math.ceil(len(self.reveal_units) * frac))),
+        )
         if count == self.last_reveal_count:
             return
+
         self.last_reveal_count = count
-        shown = "".join(self.clusters[:count])
+        shown = "".join(self.reveal_units[:count])
         if self.shadow_id:
             self.canvas.itemconfigure(self.shadow_id, text=shown)
         self.canvas.itemconfigure(self.text_id, text=shown)
@@ -1125,6 +1179,12 @@ class LyricFloatPlayer:
                         end_time=next_t,
                     )
                     self.floating_boxes.append(card)
+                    # Transparent top-level windows are expensive on Linux.
+                    # Keep enough history to preserve the continuous-flow look,
+                    # but cap old cards so long/fast songs stay smooth.
+                    while len(self.floating_boxes) > 12:
+                        oldest = self.floating_boxes.pop(0)
+                        oldest.destroy()
 
                 self.next_lyric_idx += 1
 
