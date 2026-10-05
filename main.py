@@ -111,10 +111,10 @@ class EasyLyricStudio(tk.Tk):
 
         lbl_tag = tk.Label(
             header,
-            text="เลือกเพลง  •  จับเวลาอัตโนมัติ  •  เล่นเนื้อร้อง",
+            text="SYNCED LYRICS  /  LOCAL PLAYER",
             font=("Helvetica", 10),
             bg="#0b0b0c",
-            fg="#7f849c",
+            fg="#77777f",
         )
         lbl_tag.pack(side="left", pady=(15, 12))
 
@@ -173,7 +173,7 @@ class EasyLyricStudio(tk.Tk):
 
         tk.Label(
             search_box,
-            text="ชื่อเพลง:",
+            text="SEARCH",
             font=("Helvetica", 9, "bold"),
             bg="#151517",
             fg="#96969d",
@@ -216,7 +216,7 @@ class EasyLyricStudio(tk.Tk):
 
         tk.Label(
             tools_bar,
-            text="เนื้อเพลงและเวลา",
+            text="TIMELINE",
             font=("Helvetica", 11, "bold"),
             bg="#0b0b0c",
             fg="#d8ff3e",
@@ -239,9 +239,9 @@ class EasyLyricStudio(tk.Tk):
 
         btn_tap = tk.Button(
             tools_bar,
-            text="จับเวลาด้วย Spacebar",
+            text="TAP SYNC",
             font=("Helvetica", 9, "bold"),
-            bg="#fab387",
+            bg="#c7a76d",
             fg="#0b0b0c",
             relief="flat",
             padx=10,
@@ -253,7 +253,7 @@ class EasyLyricStudio(tk.Tk):
 
         btn_edit_text = tk.Button(
             tools_bar,
-            text="แก้ไขเนื้อเพลง",
+            text="EDIT LYRICS",
             font=("Helvetica", 9),
             bg="#303034",
             fg="#ededed",
@@ -294,7 +294,7 @@ class EasyLyricStudio(tk.Tk):
         self.editor_frame = tk.Frame(
             content_frame,
             bg="#151517",
-            highlightbackground="#fab387",
+            highlightbackground="#c7a76d",
             highlightthickness=1,
         )
         tk.Label(
@@ -366,7 +366,7 @@ class EasyLyricStudio(tk.Tk):
             text="ล้าง",
             font=("Helvetica", 9),
             bg="#303034",
-            fg="#e78284",
+            fg="#e06c75",
             relief="flat",
             padx=8,
             pady=4,
@@ -442,7 +442,7 @@ class EasyLyricStudio(tk.Tk):
             else:
                 cmd = (lambda v=val: lambda: self.adjust_offset(v))()
                 bg_col = "#3b2d35"
-                fg_col = "#fab387"
+                fg_col = "#c7a76d"
 
             tk.Button(
                 offset_bar,
@@ -460,7 +460,7 @@ class EasyLyricStudio(tk.Tk):
         # Auto silence button
         tk.Button(
             offset_bar,
-            text="ปรับช่วงเริ่มอัตโนมัติ",
+            text="DETECT INTRO",
             font=("Helvetica", 9, "bold"),
             bg="#303034",
             fg="#d9d9d9",
@@ -498,14 +498,12 @@ class EasyLyricStudio(tk.Tk):
         ).pack(side="left", padx=(0, 8))
 
         self.style_var = tk.StringVar(
-            value="Minimal Dark"
+            value="Focus Player"
         )
         self.style_map = {
-            "Minimal Dark": "floating_cards",
+            "Focus Player": "dynamic_island",
+            "Minimal Card": "floating_cards",
             "Clean Text": "text_only",
-            "High Contrast": "neon_cyber",
-            "Soft Dark": "glass_aurora",
-            "Compact Player": "dynamic_island",
         }
 
         self.cb_style = ttk.Combobox(
@@ -521,7 +519,7 @@ class EasyLyricStudio(tk.Tk):
         # Giant Play Button
         self.btn_play = tk.Button(
             play_bar,
-            text="PLAY  ↵",
+            text="PLAY",
             font=("Helvetica", 13, "bold"),
             bg="#d8ff3e",
             fg="#0b0b0c",
@@ -587,31 +585,34 @@ class EasyLyricStudio(tk.Tk):
         self.entry_search.delete(0, "end")
         self.entry_search.insert(0, clean_name)
 
-        # Automatically check for leading silence in audio (e.g. video intro)
-        lead_silence = sync_engine.detect_lead_silence(song_path)
-        if lead_silence >= 0.8:
-            self.adjust_offset(lead_silence, absolute=True)
-            self.lbl_song_status.config(
-                text=f"ไฟล์: {filename} • ตรวจพบช่วงเงียบต้นเพลง {lead_silence:.1f}s (ตั้งค่าชดเชย +{lead_silence:.1f}s ให้อัตโนมัติแล้ว)",
-                fg="#d8ff3e",
-            )
+        # Keep synced LRC on its native timeline.
+        # Auto-applying detected intro silence can delay lyrics twice because
+        # synced lyric sources already include the song intro in their timestamps.
+        self.adjust_offset(0.0, absolute=True)
 
         # 1. Check if a local .lrc file in lyrics/ matches this song
         base_dir = os.path.dirname(os.path.abspath(__file__))
         lyrics_dir = os.path.join(base_dir, "lyrics")
 
         if preferred_lrc and os.path.exists(preferred_lrc):
-            self.load_lrc_file_path(preferred_lrc)
-            return
+            pref_name = sync_engine.clean_song_query(os.path.basename(preferred_lrc))
+            if sync_engine.name_similarity(clean_name, pref_name) >= 0.72:
+                self.load_lrc_file_path(preferred_lrc)
+                return
 
         matched_local_lrc = None
+        best_local_score = 0.0
         if os.path.exists(lyrics_dir):
             for f in os.listdir(lyrics_dir):
-                if f.endswith(".lrc"):
-                    f_clean = f.lower()
-                    if clean_name.lower() in f_clean or f_clean in clean_name.lower():
-                        matched_local_lrc = os.path.join(lyrics_dir, f)
-                        break
+                if not f.lower().endswith(".lrc"):
+                    continue
+                local_name = sync_engine.clean_song_query(os.path.splitext(f)[0])
+                score = sync_engine.name_similarity(clean_name, local_name)
+                if score > best_local_score:
+                    best_local_score = score
+                    matched_local_lrc = os.path.join(lyrics_dir, f)
+            if best_local_score < 0.72:
+                matched_local_lrc = None
 
         if matched_local_lrc:
             self.load_lrc_file_path(matched_local_lrc)
@@ -693,7 +694,7 @@ class EasyLyricStudio(tk.Tk):
             )
         except Exception as e:
             self.lbl_song_status.config(
-                text=f"เกิดข้อผิดพลาดในการโหลด .lrc: {e}", fg="#e78284"
+                text=f"เกิดข้อผิดพลาดในการโหลด .lrc: {e}", fg="#e06c75"
             )
 
     def load_lrc_dialog(self):
@@ -745,7 +746,7 @@ class EasyLyricStudio(tk.Tk):
             if results:
                 ref_lrc = results[0].get("syncedLyrics", "")
                 aligned = sync_engine.auto_align_lyrics(
-                    lines, ref_lrc, start_from_zero=True
+                    lines, ref_lrc, start_from_zero=False
                 )
                 self.after(0, lambda: self.update_synced_table(aligned))
                 self.after(0, lambda: self.toggle_editor())
