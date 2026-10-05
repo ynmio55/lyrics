@@ -974,6 +974,140 @@ class LyricFloatPlayer:
             command=self.stop,
         ).pack(side="right", padx=(4, 8))
 
+    def _style_short_name(self, style_key):
+        names = {
+            "floating_cards": "FLOATING",
+            "dynamic_island": "FOCUS",
+            "text_only": "TEXT",
+            "karaoke_flow": "FLOW",
+        }
+        return names.get(style_key, "VIEW")
+
+    def _close_style_menu(self):
+        popup = getattr(self, "style_popup", None)
+        if popup is not None:
+            try:
+                popup.destroy()
+            except Exception:
+                pass
+        self.style_popup = None
+
+    def show_style_menu(self):
+        """Open a compact style picker below the playback toolbar."""
+        if getattr(self, "style_popup", None) is not None:
+            self._close_style_menu()
+            return
+
+        popup = tk.Toplevel(self.ctrl_win)
+        self.style_popup = popup
+        popup.overrideredirect(True)
+        popup.attributes("-topmost", True)
+        popup.configure(bg="#121214")
+
+        width = 178
+        row_h = 38
+        pad = 8
+        height = pad * 2 + row_h * len(self.style_keys)
+
+        self.ctrl_win.update_idletasks()
+        x = self.btn_style.winfo_rootx()
+        y = self.ctrl_win.winfo_rooty() + self.ctrl_win.winfo_height() + 6
+        popup.geometry(f"{width}x{height}+{x}+{y}")
+
+        shell = tk.Frame(
+            popup,
+            bg="#121214",
+            highlightbackground="#303035",
+            highlightthickness=1,
+        )
+        shell.pack(fill="both", expand=True)
+
+        for index, key in enumerate(self.style_keys):
+            active = key == self.style_key
+            label = self._style_short_name(key).title()
+            marker = "●" if active else " "
+            btn = tk.Button(
+                shell,
+                text=f"{marker}   {label}",
+                anchor="w",
+                font=(get_cached_best_font(), 9, "bold" if active else "normal"),
+                bg="#1c1c20" if active else "#121214",
+                fg="#c8ff47" if active else "#d6d6da",
+                activebackground="#242429",
+                activeforeground="#ffffff",
+                relief="flat",
+                bd=0,
+                highlightthickness=0,
+                padx=12,
+                pady=7,
+                cursor="hand2",
+                command=lambda k=key: self.select_style(k),
+            )
+            btn.pack(fill="x", padx=6, pady=(4 if index == 0 else 0, 0))
+
+        popup.bind("<Escape>", lambda e: self._close_style_menu())
+        popup.bind("<FocusOut>", lambda e: self.root.after(80, self._close_style_menu))
+        popup.focus_force()
+
+    def select_style(self, style_key):
+        """Apply a selected playback style and refresh its surface."""
+        if style_key not in STYLES:
+            return
+
+        self._close_style_menu()
+        if style_key == self.style_key:
+            return
+
+        self.style_key = style_key
+        self.cfg = STYLES[self.style_key]
+        self._font_spec = (
+            get_cached_best_font(),
+            self.cfg["font_size"],
+            self.cfg["font_weight"],
+        )
+        self._cached_font = None
+
+        if self.island_hud:
+            self.island_hud.destroy()
+            self.island_hud = None
+        if self.flow_hud:
+            self.flow_hud.destroy()
+            self.flow_hud = None
+        for box in self.floating_boxes:
+            box.destroy()
+        self.floating_boxes.clear()
+
+        if self.cfg.get("mode") == "island":
+            self.island_hud = DynamicIslandHUD(
+                self.root,
+                self.screen_w,
+                self.screen_h,
+                self.cfg,
+                self.track_name,
+            )
+        elif self.cfg.get("mode") == "flow":
+            self.flow_hud = KaraokeFlowHUD(
+                self.root,
+                self.screen_w,
+                self.screen_h,
+                self.cfg,
+                self.lyrics,
+                self.track_name,
+            )
+            if self.next_lyric_idx > 0:
+                self.flow_hud.set_active(self.next_lyric_idx - 1)
+
+        if hasattr(self, "btn_style"):
+            self.btn_style.config(
+                text=f"{self._style_short_name(self.style_key)}  ▾"
+            )
+
+        self.toast.show(
+            self.cfg["name"],
+            color="#b8b8bf",
+            duration_ms=900,
+        )
+
     def setup_hotkeys(self):
         """Keyboard shortcuts: [ / ] or Left / Right, Space, Tab, ESC."""
         self.root.bind_all("<Escape>", lambda e: self.stop())
