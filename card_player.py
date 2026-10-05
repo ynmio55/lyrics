@@ -936,20 +936,28 @@ class LyricFloatPlayer:
         )
         self.btn_pause.pack(side="left", padx=3)
 
-        # Style switch
-        tk.Button(
+        # Premium style picker. Show the current view instead of a generic
+        # "STYLE" button and open a compact custom popup on click.
+        self.style_popup = None
+        self.btn_style = tk.Button(
             frame,
-            text="STYLE",
-            font=(BEST_FONT, 8),
-            bg="#2a2a2e",
-            fg="#a9a9b2",
-            activebackground="#343439",
+            text=f"{self._style_short_name(self.style_key)}  ▾",
+            font=(BEST_FONT, 8, "bold"),
+            bg="#202024",
+            fg="#b8b8bf",
+            activebackground="#2a2a2f",
+            activeforeground="#ffffff",
             relief="flat",
-            padx=6,
-            pady=2,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground="#34343a",
+            highlightcolor="#34343a",
+            padx=9,
+            pady=3,
             cursor="hand2",
-            command=self.cycle_style,
-        ).pack(side="left", padx=2)
+            command=self.show_style_menu,
+        )
+        self.btn_style.pack(side="left", padx=3)
 
         # Stop (ESC)
         tk.Button(
@@ -1009,34 +1017,10 @@ class LyricFloatPlayer:
             self.toast.show("PLAYING", color="#c8ff47")
 
     def cycle_style(self):
-        """Cycles between visual styles during playback."""
+        """Cycle styles with Tab using the same premium selector logic."""
         cur_idx = self.style_keys.index(self.style_key)
-        self.style_key = self.style_keys[(cur_idx + 1) % len(self.style_keys)]
-        self.cfg = STYLES[self.style_key]
-
-        # Reset active views for new style mode
-        if self.island_hud:
-            self.island_hud.destroy()
-            self.island_hud = None
-        if self.flow_hud:
-            self.flow_hud.destroy()
-            self.flow_hud = None
-        for b in self.floating_boxes:
-            b.destroy()
-        self.floating_boxes.clear()
-
-        if self.cfg.get("mode") == "island":
-            self.island_hud = DynamicIslandHUD(
-                self.root, self.screen_w, self.screen_h, self.cfg, self.track_name
-            )
-        elif self.cfg.get("mode") == "flow":
-            self.flow_hud = KaraokeFlowHUD(
-                self.root, self.screen_w, self.screen_h, self.cfg, self.lyrics, self.track_name
-            )
-            if self.next_lyric_idx > 0:
-                self.flow_hud.set_active(self.next_lyric_idx - 1)
-
-        self.toast.show(f"STYLE  {self.cfg['name']}", color="#a9a9b2")
+        next_key = self.style_keys[(cur_idx + 1) % len(self.style_keys)]
+        self.select_style(next_key)
 
     def _get_font(self):
         """Returns cached Font object for text measurement."""
@@ -1250,6 +1234,7 @@ class LyricFloatPlayer:
         except Exception:
             pass
 
+        self._close_style_menu()
         self.toast.destroy()
 
         # Unbind hotkeys
