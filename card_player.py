@@ -43,14 +43,14 @@ def init_audio():
 
 
 # Default animation physics
-RISE_SPEED = 42
+RISE_SPEED = 48
 BOTTOM_SPAWN_OFFSET = 140
 TRANS_KEY = "#000002"
 TRANS_KEY_RGB = (0, 0, 2)
 
-# Animation tick interval (ms) - 30fps is plenty smooth for floating text
-# and reduces X11 round-trip pressure that causes audio stuttering on Linux
-TICK_INTERVAL = 33
+# Animation loop target. Window moves are de-duplicated below, so we can sample
+# motion at ~60 fps without hammering X11/Wayland with identical geometry calls.
+TICK_INTERVAL = 16
 
 
 def get_best_font():
@@ -329,9 +329,18 @@ class FloatingCardItem:
         except Exception:
             pass
 
-        self.win.geometry(f"{self.box_w}x{self.box_h}+{int(x)}+{int(y)}")
+        # Spawn a little below the lane and ease into place instead of popping in.
         self.x = float(x)
-        self.y = float(y)
+        self.base_y = float(y)
+        self.travel_y = 0.0
+        self.spawn_time = time.perf_counter()
+        self.enter_duration = 0.34
+        self.enter_offset = 30.0
+        self.last_draw_y = None
+        self.y = self.base_y + self.enter_offset
+        self.win.geometry(
+            f"{self.box_w}x{self.box_h}+{int(self.x)}+{int(self.y)}"
+        )
         self.is_alive = True
 
         self.canvas = tk.Canvas(
@@ -407,20 +416,6 @@ class FloatingCardItem:
             self.canvas.itemconfigure(self.shadow_id, text="")
         self.canvas.itemconfigure(self.text_id, text="")
 
-    def typewriter(self):
-        if not self.is_alive:
-            return
-        try:
-            if self.type_idx <= len(self.clusters):
-                sub = "".join(self.clusters[: self.type_idx])
-                if self.shadow_id:
-                    self.canvas.itemconfigure(self.shadow_id, text=sub)
-                self.canvas.itemconfigure(self.text_id, text=sub)
-                self.type_idx += 1
-                self.win.after(35, self.typewriter)
-        except Exception:
-            self.is_alive = False
-
     def update_reveal(self, current_time):
         """Reveal readable chunks slightly ahead of the raw line interval.
 
@@ -456,12 +451,30 @@ class FloatingCardItem:
         self.canvas.itemconfigure(self.text_id, text=shown)
 
     def rise(self, dy):
+        """Move upward with a soft entrance and stable frame pacing."""
         if not self.is_alive:
             return
-        self.y -= dy
+
+        self.travel_y += max(0.0, dy)
+
+        elapsed = max(0.0, time.perf_counter() - self.spawn_time)
+        t = min(1.0, elapsed / self.enter_duration)
+        # Quintic smoothstep: no hard start/stop when a new lyric appears.
+        eased = t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+        entrance = (1.0 - eased) * self.enter_offset
+
+        self.y = self.base_y - self.travel_y + entrance
+        draw_y = int(round(self.y))
+
+        # Moving a Toplevel is expensive on Linux. Only notify the window manager
+        # when the visible pixel actually changes.
+        if draw_y == self.last_draw_y:
+            return
+        self.last_draw_y = draw_y
+
         try:
             self.win.geometry(
-                f"{self.box_w}x{self.box_h}+{int(self.x)}+{int(self.y)}"
+                f"{self.box_w}x{self.box_h}+{int(round(self.x))}+{draw_y}"
             )
         except Exception:
             self.is_alive = False
@@ -1179,7 +1192,7 @@ class LyricFloatPlayer:
 
     def start(self):
         self.is_running = True
-        self.start_wall_time = time.time()
+        self.start_wall_time = time.perf_counter()
         self.last_frame_time = self.start_wall_time
         self.total_paused_duration = 0.0
 
@@ -1219,15 +1232,17 @@ class LyricFloatPlayer:
                 return pos_ms / 1000.0
 
         # Fallback to wall-clock if no audio playing
-        return time.time() - self.start_wall_time - self.total_paused_duration
+        return time.perf_counter() - self.start_wall_time - self.total_paused_duration
 
     def tick(self):
         if not self.is_running:
             return
 
-        now = time.time()
+        now = time.perf_counter()
         dt = now - self.last_frame_time
         self.last_frame_time = now
+        # A compositor hiccup should not make cards teleport on the next frame.
+        dt = min(max(dt, 0.0), 0.050)
 
         if not self.is_paused:
             raw_audio_t = self.get_effective_time()
@@ -1300,7 +1315,7 @@ class LyricFloatPlayer:
                     # Transparent top-level windows are expensive on Linux.
                     # Keep enough history to preserve the continuous-flow look,
                     # but cap old cards so long/fast songs stay smooth.
-                    while len(self.floating_boxes) > 12:
+                    while len(self.floating_boxes) > 9:
                         oldest = self.floating_boxes.pop(0)
                         oldest.destroy()
 
