@@ -130,40 +130,49 @@ def make_card_background(
 
 # Preset Visual Styles
 STYLES = {
+    "dynamic_island": {
+        "name": "Focus Player",
+        "mode": "island",
+        "has_card": True,
+        "box_w": 820,
+        "box_h": 148,
+        "radius": 20,
+        "bg_rgb": (12, 12, 14),
+        "border_rgb": (52, 52, 57),
+        "border_width": 1,
+        "badge_color": "#c8ff47",
+        "text_color": "#ffffff",
+        "subtext_color": "#898990",
+        "accent_color": "#c8ff47",
+        "font_size": 21,
+        "font_weight": "bold",
+    },
     "floating_cards": {
-        "name": "Minimal Dark", "mode": "floating", "has_card": True,
-        "box_w": 560, "box_h": 122, "radius": 18,
-        "bg_rgb": (17, 17, 19), "border_rgb": (55, 55, 60),
-        "border_width": 1, "badge_color": "#d8ff3e",
-        "text_color": "#f5f5f5", "font_size": 20, "font_weight": "bold",
+        "name": "Minimal Card",
+        "mode": "floating",
+        "has_card": True,
+        "box_w": 560,
+        "box_h": 122,
+        "radius": 18,
+        "bg_rgb": (17, 17, 19),
+        "border_rgb": (55, 55, 60),
+        "border_width": 1,
+        "badge_color": "#c8ff47",
+        "text_color": "#f5f5f5",
+        "font_size": 20,
+        "font_weight": "bold",
     },
     "text_only": {
-        "name": "Clean Text", "mode": "floating", "has_card": False,
-        "box_w": 600, "box_h": 116, "text_color": "#ffffff",
-        "shadow_color": "#080809", "shadow_offset": 2,
-        "font_size": 23, "font_weight": "bold",
-    },
-    "neon_cyber": {
-        "name": "High Contrast", "mode": "floating", "has_card": True,
-        "box_w": 560, "box_h": 122, "radius": 18,
-        "bg_rgb": (8, 8, 9), "border_rgb": (216, 255, 62),
-        "border_width": 2, "badge_color": "#d8ff3e",
-        "text_color": "#ffffff", "font_size": 20, "font_weight": "bold",
-    },
-    "glass_aurora": {
-        "name": "Soft Dark", "mode": "floating", "has_card": True,
-        "box_w": 560, "box_h": 122, "radius": 18,
-        "bg_rgb": (28, 28, 31), "border_rgb": (67, 67, 72),
-        "border_width": 1, "badge_color": "#b8b8be",
-        "text_color": "#f2f2f2", "font_size": 20, "font_weight": "bold",
-    },
-    "dynamic_island": {
-        "name": "Compact Player", "mode": "island", "has_card": True,
-        "box_w": 820, "box_h": 148, "radius": 20,
-        "bg_rgb": (12, 12, 14), "border_rgb": (52, 52, 57),
-        "border_width": 1, "badge_color": "#d8ff3e",
-        "text_color": "#ffffff", "subtext_color": "#898990",
-        "accent_color": "#d8ff3e", "font_size": 21, "font_weight": "bold",
+        "name": "Clean Text",
+        "mode": "floating",
+        "has_card": False,
+        "box_w": 600,
+        "box_h": 116,
+        "text_color": "#ffffff",
+        "shadow_color": "#080809",
+        "shadow_offset": 2,
+        "font_size": 23,
+        "font_weight": "bold",
     },
 }
 
@@ -538,7 +547,7 @@ class LyricFloatPlayer:
         root,
         lyrics,
         audio_path=None,
-        style="floating_cards",
+        style="dynamic_island",
         initial_offset=0.0,
         on_finished=None,
     ):
@@ -555,7 +564,7 @@ class LyricFloatPlayer:
         )
 
         self.style_keys = list(STYLES.keys())
-        self.style_key = style if style in STYLES else "floating_cards"
+        self.style_key = style if style in STYLES else "dynamic_island"
         self.cfg = STYLES[self.style_key]
 
         # Cache font for text measurement (avoid creating new Font objects every tick)
@@ -953,7 +962,7 @@ class LyricFloatPlayer:
             self.on_finished(self.sync_offset)
 
 
-def play_standalone(lyrics, audio_path=None, style="floating_cards"):
+def play_standalone(lyrics, audio_path=None, style="dynamic_island"):
     root = tk.Tk()
     root.withdraw()
 
@@ -978,4 +987,4 @@ if __name__ == "__main__":
         (3.5, "迷わずに今 矛盾だらけの世界を"),
         (7.0, "その手で撃ち放て"),
     ]
-    play_standalone(sample_lyrics, style="floating_cards")
+    play_standalone(sample_lyrics, style="dynamic_island")
