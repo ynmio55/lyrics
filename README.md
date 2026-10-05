@@ -1,61 +1,52 @@
-# 🎵 Lyric Studio & Floating Lyric Cards
+# Lyric Studio
 
-โปรแกรมช่วยจับเวลาเนื้อเพลงอัตโนมัติ และแสดงการ์ดข้อความลอยบนหน้าจอ (Lyric Cards) ตามจังหวะเพลง
+Desktop lyric synchronization and overlay player for Windows and Linux.
 
----
+## What it does
 
-## 📁 โครงสร้างโปรเจกต์ใหม่ (จัดระเบียบเข้าใจง่าย ไม่สับสน)
+- Opens local audio files: MP3, WAV, OGG, FLAC and M4A where supported by the local audio stack.
+- Searches LRCLIB for synchronized lyrics.
+- Ranks lyric results using both song-name similarity and recording duration to avoid selecting the wrong live/remaster/edit.
+- Loads local `.lrc` files.
+- Includes Tap Sync for songs that have no reliable synchronized lyrics.
+- Shows a persistent Focus Player with the current line, next line and line progress.
+- Supports live timing correction while the song is playing.
 
-```text
-c:\all\test\
-├── main.py            # ⭐ ไฟล์หลักสำหรับรันโปรแกรม (หน้าต่าง Lyric Studio GUI)
-├── card_player.py     # ระบบแสดงการ์ดลอยบนหน้าจอ (สามารถกด ESC เพื่อหยุดได้ตลอดเวลา)
-├── sync_engine.py     # ระบบค้นหาและจับคู่เวลาอัตโนมัติ (LrcLib API + Auto Alignment)
-├── tap_syncer.py      # โหมดเคาะจับเวลาสดด้วยปุ่ม Spacebar
-├── songs/             # โฟลเดอร์เก็บไฟล์เพลง (.mp3)
-│   └── song.mp3       # ไฟล์เพลงตัวอย่าง
-├── lyrics/            # โฟลเดอร์เก็บไฟล์เนื้อเพลง (.lrc)
-│   └── EndOfTheRoad.lrc
-└── README.md          # คู่มือการใช้งาน
-```
+## Run
 
----
-
-## 🚀 วิธีเปิดใช้งาน
-
-เปิด Terminal ในโฟลเดอร์นี้ แล้วสั่งรันไฟล์เดียว:
-
-```cmd
+```bash
+python -m pip install -r requirements.txt
 python main.py
 ```
 
----
+On Fedora, install Tk if it is not already present:
 
-## 🎯 ฟีเจอร์หลักในหน้าต่าง Lyric Studio
+```bash
+sudo dnf install python3-tkinter
+```
 
-1. **เลือกเพลง (.mp3)**:
-   - มีปุ่มเลือกไฟล์เพลง หรือจะใส่ไว้ในโฟลเดอร์ `songs/` โปรแกรมจะโหลดให้อัตโนมัติ
-2. **จับเวลาอัตโนมัติ (Auto Sync)**:
-   - วางเนื้อเพลงธรรมดาที่ต้องการในช่องซ้าย
-   - พิมพ์ชื่อเพลงแล้วกด **"⚡ ตรวจจับเวลาอัตโนมัติ"**
-   - ระบบจะค้นหาเวลาที่ตรงกับท่อนเพลงจากฐานข้อมูลระดับมิลลิวินาทีมาให้ทันที
-3. **เคาะจังหวะสด (Tap Sync)**:
-   - สำหรับเพลงไทย หรือเพลงคัฟเวอร์ที่ไม่มีในฐานข้อมูล
-   - กดปุ่ม **"⌨️ เคาะจังหวะสด"** -> เพลงจะเล่นขึ้นมา คุณแค่กด **Spacebar** ตามท่อนที่ร้อง จบเพลงเดียวได้เวลาครบทั้งเพลง!
-4. **เปิดการ์ดลอย (Play Lyric Cards)**:
-   - กดปุ่ม **"🚀 ▶️ เล่น Lyric Cards (Enter)"**
-   - รองรับรูปแบบกราฟิกพรีเมียม 5 สไตล์:
-     - `✨ Dynamic Island`: แถบแคปซูลลอยทรงหรูสไตล์ Apple Music HUD (มี Equalizer bars และพรีวิวท่อนถัดไป)
-     - `🌙 Modern Glass Cards`: การ์ดลอยขอบมนแก้ว สวยเนียนตา
-     - `⚡ Cyberpunk Neon`: นีออนไซเบอร์เรืองแสง
-     - `🎬 Cinema Karaoke`: ซับไตเติลภาพยนตร์ คมชัดอ่านง่าย
-     - `☁️ Aurora Glass`: ออโรรามินิมอล นุ่มนวลสบายตา
-   - **ปุ่มลัด (Hotkeys) ขณะเล่น**:
-     - `[` หรือ `←` : **หน่วงเวลา +0.1s** (หากเนื้อเพลงขึ้นเร็วกว่าเสียงร้อง ให้กดปุ่มนี้)
-     - `]` หรือ `→` : **เร่งเวลา -0.1s** (หากเนื้อเพลงขึ้นช้ากว่าเสียงร้อง)
-     - `Spacebar` : **พัก/เล่นต่อ (Pause/Resume)**
-     - `Tab` : **สลับสไตล์การแสดงผลสดทันที**
-     - `ESC` : **หยุดเล่นและกลับสู่หน้าต่างสตูดิโอ**
-5. **ระบบตรวจจับและชดเชยเวลาอัจฉริยะ (Smart Sync & Lead-Silence Detection)**:
-   - ตรวจจับช่วงเงียบต้นเพลง (Silence Intro) จากไฟล์วิดีโอ/เพลงให้อัตโนมัติ
-   - แถบปรับชดเชยเวลาที่หน้าหลัก: ปรับ `+0.1s`, `+0.2s`, `+0.5s` หรือตรวจจับอัตโนมัติได้ในคลิกเดียว
+## Timing controls
+
+During playback:
+
+- `[` or Left Arrow: delay lyrics by +0.1 s
+- `]` or Right Arrow: advance lyrics by -0.1 s
+- `Space`: pause/resume
+- `Tab`: change overlay style
+- `Esc`: close the overlay
+
+The default **Focus Player** uses one persistent lyric surface, so lines do not stack on top of each other.
+
+## Sync behavior
+
+Lyric Studio does not automatically add detected intro silence to online synchronized lyrics. Most synchronized LRC files already contain the intro in their timestamps, and applying it a second time makes lyrics lag behind the vocal.
+
+For manual timing, **Tap Sync** records timestamps from the audio playback clock itself rather than wall-clock time.
+
+## Files
+
+- `main.py` — main studio window
+- `card_player.py` — lyric overlay and playback
+- `sync_engine.py` — LRCLIB search, parsing, ranking and alignment
+- `tap_syncer.py` — manual Space-key synchronization
+- `lyrics/` — optional local LRC files
