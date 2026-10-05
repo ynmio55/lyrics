@@ -1,9 +1,9 @@
 """
-card_player.py - High-End Floating Lyric Player (Next-Gen Edition)
+card_player.py - Synchronized lyric overlay player
 Features:
 - Hardware audio synchronization (pygame.mixer.music.get_pos)
 - Real-time live sync offset adjustment (Hotkeys: [ / ] or Left / Right arrows)
-- Dynamic Island / Apple Music HUD, Modern Glass Cards, Cyberpunk Glow, and Cinema Subtitles
+- Focused single-line overlay plus minimal optional card styles
 - Unicode/Thai combining-character safe typewriter effect & instant mode
 - Floating toast HUD & top-right micro control toolbar
 - Press ESC at any time to return to studio.
@@ -297,7 +297,7 @@ class FloatingCardItem:
             self.canvas.create_image(0, 0, anchor="nw", image=self.bg_photo)
 
             # Header badge (🎵 timestamp)
-            badge_text = f"🎵  {timestamp_str}"
+            badge_text = timestamp_str
             self.canvas.create_text(
                 self.box_w // 2,
                 24,
@@ -335,9 +335,13 @@ class FloatingCardItem:
             width=wrap_w,
         )
 
+        # Timing comes first: display the full lyric immediately at its timestamp.
+        # A typewriter reveal made long lines visibly lag behind the vocal.
         self.clusters = split_graphemes(text)
-        self.type_idx = 0
-        self.typewriter()
+        self.type_idx = len(self.clusters)
+        if self.shadow_id:
+            self.canvas.itemconfigure(self.shadow_id, text=text)
+        self.canvas.itemconfigure(self.text_id, text=text)
 
     def typewriter(self):
         if not self.is_alive:
@@ -376,7 +380,7 @@ class FloatingCardItem:
 
 
 class DynamicIslandHUD:
-    """The signature Apple Music / Dynamic Island centered floating HUD."""
+    """Centered persistent lyric HUD with current/next lines and progress."""
 
     def __init__(self, parent, screen_w, screen_h, cfg, track_name=""):
         self.parent = parent
@@ -425,7 +429,7 @@ class DynamicIslandHUD:
         )
 
         self.txt_track = self.canvas.create_text(
-            170,
+            62,
             24,
             anchor="w",
             text=self.track_name[:42],
@@ -586,7 +590,7 @@ class LyricFloatPlayer:
         self.ctrl_win.attributes("-topmost", True)
         self.ctrl_win.configure(bg="#101012")
 
-        bar_w = 460
+        bar_w = 560
         bar_h = 42
         self.ctrl_win.geometry(f"{bar_w}x{bar_h}+{self.screen_w - bar_w - 20}+18")
 
@@ -698,13 +702,13 @@ class LyricFloatPlayer:
     def adjust_live_offset(self, delta):
         """Adjusts sync offset on the fly and shows toast."""
         self.sync_offset = round(self.sync_offset + delta, 2)
-        self.lbl_offset.config(text=f"⏱️ {self.sync_offset:+.2f}s")
+        self.lbl_offset.config(text=f"OFFSET {self.sync_offset:+.2f}s")
 
         if delta > 0:
-            msg = f"⏱️ หน่วงเวลา: {self.sync_offset:+.2f}s (เนื้อร้องจะขึ้นช้าลงอีกนิด)"
+            msg = f"DELAY {self.sync_offset:+.2f}s"
             col = "#c8ff47"
         else:
-            msg = f"⏱️ เร่งเวลา: {self.sync_offset:+.2f}s (เนื้อร้องจะขึ้นเร็วขึ้นอีกนิด)"
+            msg = f"ADVANCE {self.sync_offset:+.2f}s"
             col = "#d7ad68"
         self.toast.show(msg, color=col)
 
@@ -716,16 +720,16 @@ class LyricFloatPlayer:
                     pygame.mixer.music.pause()
             except Exception:
                 pass
-            self.btn_pause.config(text="▶️ เล่นต่อ", fg="#c8ff47")
-            self.toast.show("⏸️ พักชั่วคราว (กด Space เพื่อเล่นต่อ)", color="#d9d9dc")
+            self.btn_pause.config(text="RESUME", fg="#c8ff47")
+            self.toast.show("PAUSED", color="#d9d9dc")
         else:
             try:
                 if pygame.mixer.get_init():
                     pygame.mixer.music.unpause()
             except Exception:
                 pass
-            self.btn_pause.config(text="⏸️ พัก", fg="#d9d9dc")
-            self.toast.show("▶️ เล่นต่อ", color="#c8ff47")
+            self.btn_pause.config(text="PAUSE", fg="#d9d9dc")
+            self.toast.show("PLAYING", color="#c8ff47")
 
     def cycle_style(self):
         """Cycles between visual styles during playback."""
@@ -746,7 +750,7 @@ class LyricFloatPlayer:
                 self.root, self.screen_w, self.screen_h, self.cfg, self.track_name
             )
 
-        self.toast.show(f"🎨 เปลี่ยนรูปแบบ: {self.cfg['name']}", color="#a9a9b2")
+        self.toast.show(f"STYLE  {self.cfg['name']}", color="#a9a9b2")
 
     def _get_font(self):
         """Returns cached Font object for text measurement."""
@@ -792,7 +796,7 @@ class LyricFloatPlayer:
 
         # Show initial tip toast
         self.toast.show(
-            "💡 กด [ หรือ ] เพื่อปรับเวลาให้ตรงกับเสียงร้อง | Space เพื่อพัก",
+            "[ / ] ปรับเวลา  •  Space พัก  •  ESC ออก",
             color="#c8ff47",
             duration_ms=2500,
         )
